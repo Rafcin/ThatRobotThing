@@ -55,9 +55,14 @@ public class Scene extends RajawaliRenderer {
     private static final float CAMERA_FAR = 200f;
     private static final int MAX_NUMBER_OF_POINTS = 60000;
 
+    public boolean qrMarker;
+
 
     public static final int QUAD_TREE_START = -60;
-    public static final int QUAD_TREE_RANGE = 120;
+    //Size of grid when you walk
+    //@TODO figure out what unit
+    //About A Meter Good Enough.
+    public static final int QUAD_TREE_RANGE = 380;
 
     private TouchViewHandler mTouchViewHandler;
 
@@ -80,16 +85,27 @@ public class Scene extends RajawaliRenderer {
     private FloorPlan floorPlan;
     private com.projecttango.examples.java.pointcloud.TangoUtilClasses.tangoutils.rajawali.Pose startPoint;
     private com.projecttango.examples.java.pointcloud.TangoUtilClasses.tangoutils.rajawali.Pose endPoint;
+    private com.projecttango.examples.java.pointcloud.TangoUtilClasses.tangoutils.rajawali.Pose qrPose;
     private List<Cube> pathCubes = new ArrayList<>();
     private boolean fillPath = false;
     private Material blue;
+    private Material orange;
     private boolean renderVirtualObjects;
-    private Cube arrowObj;
     private Plane posDot;
 
-    private Boolean pointCloudRenderOnOrOff = true;
+    private Vector3 qrBucketObjPos;
+
 
     Stack linePoints = new Stack();
+
+    private float[] publicRotation;
+    private float[] publicTranslation;
+    Cube cube = new Cube(1.0f);
+
+    Stack points = new Stack();
+    Line3D line = new Line3D(points, 5, 0x00ff00);
+    Material lineMat = new Material();
+
 
 
 
@@ -108,6 +124,7 @@ public class Scene extends RajawaliRenderer {
     protected void initScene() {
         mGrid = new Grid(100, 1, 1, 0xFFCCCCCC);
         mGrid.setPosition(0, -1.3f, 0);
+
         //getCurrentScene().addChild(mGrid);
 
         Texture arrowNav = new Texture("Arrow", R.drawable.ic_navigation_arrow);
@@ -119,16 +136,18 @@ public class Scene extends RajawaliRenderer {
             e.printStackTrace();
         }
 
-        arrowObj = new Cube(0.5f);
-        arrowObj.setColor(Color.alpha(0));
-        arrowObj.setMaterial(material);
+
         //getCurrentScene().addChild(arrowObj);
 
         mFrustumAxes = new FrustumAxes(3);
         getCurrentScene().addChild(mFrustumAxes);
 
+
+
         blue = new Material();
         blue.setColor(Color.BLUE);
+        orange = new Material();
+        orange.setColor(Color.argb(134,255,128,0));
 
         // Indicate four floats per point since the point cloud data comes
         // in XYZC format.
@@ -145,25 +164,15 @@ public class Scene extends RajawaliRenderer {
             getCurrentCamera().setFieldOfView(37.5);
 
 
-
-        Line3D line = new Line3D(linePoints, 1, 0xffffffff);
-        Material materialLine = new Material();
-        material.setColor(Color.YELLOW);
-        line.setMaterial(material);
-        getCurrentScene().addChild(line);
-
-
     }
 
 
 
     public void setPointCloudOn(){
-        pointCloudRenderOnOrOff = true;
         mPointCloud.setColor(Color.WHITE);
 
     }
     public void setPointCloudOff(){
-        pointCloudRenderOnOrOff = false;
         mPointCloud.setColor(Color.parseColor("#00ff0000"));
     }
 
@@ -196,15 +205,18 @@ public class Scene extends RajawaliRenderer {
     public void updateCameraPose(TangoPoseData cameraPose) {
         float[] rotation = cameraPose.getRotationAsFloats();
         float[] translation = cameraPose.getTranslationAsFloats();
+        addQrMarker();
         Quaternion quaternion = new Quaternion(rotation[3], rotation[0], rotation[1], rotation[2]);
         mFrustumAxes.setPosition(translation[0], translation[1], translation[2]);
-        arrowObj.setPosition(translation[0], translation[1], translation[2]);
         // Conjugating the Quaternion is needed because Rajawali uses left-handed convention for
         // quaternions.
-        mFrustumAxes.setOrientation(quaternion.conjugate());
+        mFrustumAxes.setOrientation(quaternion.conjugate()); //raf was right
         mTouchViewHandler.updateCamera(new Vector3(translation[0], translation[1], translation[2]),
                 quaternion);
         floorPlan.setTrajectoryPosition(new Vector3(translation[0], translation[1], translation[2]));
+        publicTranslation = translation;
+        publicRotation = rotation;
+
 
     }
 
@@ -235,7 +247,6 @@ public class Scene extends RajawaliRenderer {
                 Log.d("Scene onRender","in try statment");
                 List<Vector2> path = finder.findPathBetween(startPoint.getPosition(), endPoint.getPosition());
                 for (Vector2 vector2 : path) {
-                    Cube cube = new Cube(0.2f);
                     cube.setMaterial(blue);
                     cube.setPosition(new Vector3(vector2.getX(), -1.2, vector2.getY()));
                     getCurrentScene().addChild(cube);
@@ -267,6 +278,44 @@ public class Scene extends RajawaliRenderer {
         }
     }
 
+    public void addQrMarker(){
+        if(qrMarker == true){
+            Log.d("QRMarker","Is True");
+            addQRBucketObject();
+            // Set the pos of the cube at the last pos the Furstrum was at.
+            qrMarker = false;
+        }else{
+            Log.d("QRMarker","Still False");
+        }
+    }
+
+    public void addQRBucketObject(){
+        Plane bucketQR = new Plane(0.7f,0.7f,1,1,1);
+        bucketQR.setMaterial(orange);
+        bucketQR.setPosition(new Vector3(publicTranslation[0],-1.39,publicTranslation[2]));
+        bucketQR.setRotY(90);
+        bucketQR.setRotZ(90);
+        qrBucketObjPos = bucketQR.getPosition();
+        points.add(qrBucketObjPos);
+        getCurrentScene().addChild(bucketQR);
+
+
+    }
+
+    public void drawLineBtwnBuckets(){
+        lineMat.setColor(Color.RED);
+        line.setMaterial(lineMat);
+        getCurrentScene().addChild(line);
+    }
+
+    public void removeLineBtwnBuckets(){
+        getCurrentScene().removeChild(line);
+    }
+
+    public void setTrueMarker(){
+        qrMarker = true;
+    }
+
     public void setFirstPersonView() {
         mTouchViewHandler.setFirstPersonView();
     }
@@ -286,6 +335,10 @@ public class Scene extends RajawaliRenderer {
     }
 
     public QuadTree getFloorPlanData() {
+        return data;
+    }
+
+    public QuadTree getData() {
         return data;
     }
 

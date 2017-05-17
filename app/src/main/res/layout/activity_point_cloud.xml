@@ -15,7 +15,8 @@
 -->
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
-    android:layout_height="wrap_content" >
+    android:layout_height="wrap_content"
+    android:background="#FF212121">
 
     <android.support.v7.widget.Toolbar
         android:id="@+id/mainToolBar"
@@ -34,13 +35,20 @@
         android:layout_gravity="top"
         android:layout_below="@id/mainToolBar"/>
 
-    
+    <com.google.atap.tangoservice.TangoTextureCameraPreview
+        android:layout_width="1500px"
+        android:layout_height="750px"
+        android:id="@+id/cameraPreview"
+        android:layout_alignParentBottom="true"
+        android:paddingLeft="@dimen/activity_horizontal_margin"
+        />
+
     <Button
         android:layout_width="320px"
         android:layout_height="125px"
         android:id="@+id/setStartPoint"
         android:text="StartPoint"
-        android:layout_below="@id/gl_surface_view"
+        android:layout_below="@id/mainToolBar"
         />
     <Button
         android:layout_width="320px"
@@ -54,5 +62,16 @@
         android:layout_height="125px"
         android:id="@+id/togglePointCloud"
         android:layout_below="@id/setEndPoint"/>
+
+    <ToggleButton
+        android:layout_width="320px"
+        android:layout_height="125px"
+        android:id="@+id/toggleMotors"
+        android:layout_below="@id/togglePointCloud"/>
+    <SeekBar
+        android:layout_width="match_parent"
+        android:layout_height="125px"
+        android:id="@+id/motorBar"
+        android:max="1500"/>
 
 </RelativeLayout>

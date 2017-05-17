@@ -16,20 +16,32 @@
 
 package com.projecttango.examples.java.pointcloud;
 
+import android.Manifest;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.hardware.Camera;
 import android.hardware.display.DisplayManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.speech.tts.TextToSpeech;
-import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Display;
+import android.view.InputDevice;
 import android.view.MotionEvent;
+import android.view.Surface;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.CompoundButton;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ToggleButton;
@@ -39,6 +51,7 @@ import com.afollestad.materialdialogs.GravityEnum;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.afollestad.materialdialogs.Theme;
 import com.google.atap.tangoservice.Tango;
+import com.google.atap.tangoservice.TangoCameraIntrinsics;
 import com.google.atap.tangoservice.TangoConfig;
 import com.google.atap.tangoservice.TangoCoordinateFramePair;
 import com.google.atap.tangoservice.TangoErrorException;
@@ -47,29 +60,59 @@ import com.google.atap.tangoservice.TangoInvalidException;
 import com.google.atap.tangoservice.TangoOutOfDateException;
 import com.google.atap.tangoservice.TangoPointCloudData;
 import com.google.atap.tangoservice.TangoPoseData;
+import com.google.atap.tangoservice.TangoTextureCameraPreview;
+import com.google.zxing.BinaryBitmap;
+import com.google.zxing.ChecksumException;
+import com.google.zxing.FormatException;
+import com.google.zxing.LuminanceSource;
+import com.google.zxing.NotFoundException;
+import com.google.zxing.RGBLuminanceSource;
+import com.google.zxing.Reader;
+import com.google.zxing.Result;
+import com.google.zxing.common.HybridBinarizer;
+import com.google.zxing.qrcode.QRCodeReader;
 import com.projecttango.examples.java.pointcloud.Data.MapView;
 import com.projecttango.examples.java.pointcloud.MapViewTools.MapInfo;
+import com.projecttango.examples.java.pointcloud.OpenCV.ColorBlobDetector;
 import com.projecttango.tangosupport.TangoPointCloudManager;
 import com.projecttango.tangosupport.TangoSupport;
 import com.projecttango.tangosupport.ux.TangoUx;
 import com.projecttango.tangosupport.ux.UxExceptionEvent;
 import com.projecttango.tangosupport.ux.UxExceptionEventListener;
 
-import org.rajawali3d.math.Quaternion;
+import org.opencv.core.CvType;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Scalar;
+import org.opencv.imgproc.Imgproc;
 import org.rajawali3d.scene.ASceneFrameCallback;
 import org.rajawali3d.surface.RajawaliSurfaceView;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.FloatBuffer;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.List;
 import java.util.Locale;
+
+import ioio.lib.api.AnalogInput;
+import ioio.lib.api.DigitalOutput;
+import ioio.lib.api.IOIO;
+import ioio.lib.api.PwmOutput;
+import ioio.lib.api.exception.ConnectionLostException;
+import ioio.lib.util.BaseIOIOLooper;
+import ioio.lib.util.IOIOLooper;
+import ioio.lib.util.android.IOIOActivity;
 
 /**
  * Main Activity class for the Point Cloud Sample. Handles the connection to the {@link Tango}
  * service and propagation of Tango point cloud data to OpenGL and Layout views. OpenGL rendering
  * logic is delegated to the {@link Scene} class.
  */
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends IOIOActivity{
     private static final String TAG = MainActivity.class.getSimpleName();
 
     private static final String UX_EXCEPTION_EVENT_DETECTED = "Exception Detected: ";
@@ -101,11 +144,8 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int GRID_SIZE = 100;
 
-    protected double[] translationTango;
-    protected Quaternion rotationTango;
-    private int[] location;
-
     public MapView mMapView;
+
 
     public TangoPoseData mapPos;
 
@@ -115,18 +155,154 @@ public class MainActivity extends AppCompatActivity {
 
     private TextToSpeech textToSpeech;
 
+    private TangoTextureCameraPreview tangoCameraPreview;
+
+    private int mDepthCameraToDisplayRotation = 0;
+
+    private static final int PERMISSIONS_REQUEST = 1;
+
+    private static final String PERMISSION_CAMERA = Manifest.permission.CAMERA;
+    private static final String PERMISSION_STORAGE = Manifest.permission.WRITE_EXTERNAL_STORAGE;
+
+    final Bitmap[] bm = new Bitmap[1];
+    Bitmap bmC = Bitmap.createBitmap(224, 224, Bitmap.Config.ARGB_8888);
+    int frameCount = 0;
+
+    //IOIO
+    private PwmOutput pwm_speed_output, pwm_steering_output, pwm_pan_output, pwm_tilt_output;
+    int pwm_pan, pwm_tilt, pwm_speed, pwm_steering;
+    private AnalogInput sonar1,sonar2,sonar3;
+    int sonarPulseCounter;
+    private DigitalOutput sonar_pulse;
+    int sonar1_reading, sonar2_reading, sonar3_reading;
+    static final int DEFAULT_PWM = 1500, MAX_PWM = 2000, MIN_PWM = 1000;
+
+    public Mat tmp;
+    private ColorBlobDetector mDetector;
+    private Scalar mBlobColorRgba;
+    private Mat mSpectrum;
+    private Scalar CONTOUR_COLOR;
+
+    private SeekBar mMotorbar;
+    private int motorSliderVal;
 
 
 
+    class Looper extends BaseIOIOLooper {
 
+        /** The on-board LED. */
+        private DigitalOutput led_;
+
+
+        /**
+         * Called every time a connection with IOIO has been established.
+         * Typically used to open pins.
+         *
+         * @throws ConnectionLostException
+         *             When IOIO connection is lost.
+         *
+         * @see ioio.lib.util.AbstractIOIOActivity.IOIOThread#setup()
+         */
+        @Override
+        protected void setup() throws ConnectionLostException {
+            toast("In IOIO Setup");
+            led_ = ioio_.openDigitalOutput(0, true);
+
+            pwm_speed_output = ioio_.openPwmOutput(3, 50); //motor channel 4: front left
+            pwm_steering_output = ioio_.openPwmOutput(4, 50); //motor channel 3: back left
+
+            pwm_speed_output.setPulseWidth(1500);
+            pwm_steering_output.setPulseWidth(1500);
+
+
+            showVersions(ioio_, "IOIO connected!");
+        }
+
+        /**
+         * Called repetitively while the IOIO is connected.
+         *
+         * @throws ConnectionLostException
+         *             When IOIO connection is lost.
+         *
+         * @see ioio.lib.util.AbstractIOIOActivity.IOIOThread#loop()
+         */
+        @Override
+        public void loop() throws ConnectionLostException, InterruptedException {
+
+            if(pwm_speed > MAX_PWM) pwm_speed = MAX_PWM;
+            else if(pwm_speed < MIN_PWM) pwm_speed = MIN_PWM;
+
+            if(pwm_steering > MAX_PWM) pwm_steering = MAX_PWM;
+            else if(pwm_steering < MIN_PWM) pwm_steering = MIN_PWM;
+
+            ioio_.beginBatch();
+            try
+            {
+                pwm_speed_output.setPulseWidth(pwm_speed);
+                pwm_steering_output.setPulseWidth(pwm_steering);
+                Thread.sleep(10);
+            }
+            catch (InterruptedException e){ ioio_.disconnect();}
+            finally{ ioio_.endBatch();}
+
+
+        }
+
+        @Override
+        public void disconnected() {
+            toast("IOIO disconnected");
+        }
+
+        /**
+         * Called when the IOIO is connected, but has an incompatible firmware version.
+         *
+         * @see ioio.lib.util.IOIOLooper#incompatible(IOIO)
+         */
+        @Override
+        public void incompatible() {
+            showVersions(ioio_, "Incompatible firmware version!");
+        }
+
+        private void showVersions(IOIO ioio, String title) {
+            toast(String.format("%s\n" +
+                            "IOIOLib: %s\n" +
+                            "Application firmware: %s\n" +
+                            "Bootloader firmware: %s\n" +
+                            "Hardware: %s",
+                    title,
+                    ioio.getImplVersion(IOIO.VersionType.IOIOLIB_VER),
+                    ioio.getImplVersion(IOIO.VersionType.APP_FIRMWARE_VER),
+                    ioio.getImplVersion(IOIO.VersionType.BOOTLOADER_VER),
+                    ioio.getImplVersion(IOIO.VersionType.HARDWARE_VER)));
+        }
+
+
+    }
+
+    @Override
+    protected IOIOLooper createIOIOLooper() {
+        return new Looper();
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_point_cloud);
 
-        //mPointCountTextView = (TextView) findViewById(R.id.point_count_textview);
-        //mAverageZTextView = (TextView) findViewById(R.id.average_z_textview);
+        //IOIO
+        pwm_speed = 1500;
+        pwm_steering = 1500;
+
+        mDetector = new ColorBlobDetector();
+        mSpectrum = new Mat();
+        mBlobColorRgba = new Scalar(255);
+        CONTOUR_COLOR = new Scalar(255, 0, 0, 255);
+        //To set color, find HSV values of desired color and convert each value to 1-255 scale
+        //mDetector.setHsvColor(new Scalar(7, 196, 144)); // red
+        //mDetector.setHsvColor(new Scalar(253.796875,222.6875,195.21875));
+        mDetector.setHsvColor(new Scalar(7.015625,255.0,239.3125)); //bucket orange
+
+
         mSurfaceView = (RajawaliSurfaceView) findViewById(R.id.gl_surface_view);
 
         textToSpeech = new TextToSpeech(MainActivity.this, new TextToSpeech.OnInitListener() {
@@ -145,6 +321,8 @@ public class MainActivity extends AppCompatActivity {
         mRenderer.setTopDownView();
         mRenderer.renderVirtualObjects(true);
 
+        tangoCameraPreview = (TangoTextureCameraPreview) findViewById(R.id.cameraPreview);
+
         mapInfo = new MapInfo();
 
         primaryColor = Color.parseColor("#FF3F51B5");
@@ -160,9 +338,9 @@ public class MainActivity extends AppCompatActivity {
         //Will Error setStatusBarColor due to MIN API lvl at 19
         window.setStatusBarColor(primaryDark);
 
-        Toolbar mToolBar = (Toolbar)findViewById(R.id.mainToolBar);
-        setSupportActionBar(mToolBar);
-        getSupportActionBar().setDisplayShowTitleEnabled(false);
+        final Toolbar mToolBar = (Toolbar)findViewById(R.id.mainToolBar);
+        //setSupportActionBar(mToolBar);
+        //getSupportActionBar().setDisplayShowTitleEnabled(false);
         mToolBar.setTitleTextColor(Color.WHITE);
         mToolBar.setBackgroundColor(primaryColor);
         mToolBar.setTitle("");
@@ -182,7 +360,6 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 // Do something in response to button click
                 mRenderer.setEndPoint(getCurrentPose());
-                textToSpeech.speak("End Point Set",TextToSpeech.QUEUE_FLUSH,null);
                 Log.d("EndPoint","Endpoint Set at: " + getCurrentPose());
             }
         });
@@ -194,13 +371,56 @@ public class MainActivity extends AppCompatActivity {
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 if (isChecked) {
                     mRenderer.setThirdPersonView();
+                    mRenderer.drawLineBtwnBuckets();
                 } else {
                     mRenderer.setTopDownView();
+                    mRenderer.removeLineBtwnBuckets();
                 }
             }
         });
 
-        introDialog();
+        ToggleButton toggleMotors = (ToggleButton) findViewById(R.id.toggleMotors);
+        toggleMotors.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (isChecked) {
+                    toast("Speed"+": "+get_speed()+"Steer"+": "+get_steering());
+                    set_speed(1500+800);
+                    set_steering(1500);
+                } else {
+                    toast("Speed"+": "+get_speed()+"Steer"+": "+get_steering());
+                    set_speed(1500);
+                    set_steering(1500);
+                }
+            }
+        });
+
+        mMotorbar = (SeekBar)findViewById(R.id.motorBar); // make seekbar object
+        mMotorbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // TODO Auto-generated method stub
+                toast("MotorVal: "+motorSliderVal);
+                set_speed(1500+motorSliderVal);
+                set_steering(1500);
+
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // TODO Auto-generated method stub
+
+            }
+
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress,
+                                          boolean fromUser) {
+                // TODO Auto-generated method stub
+                motorSliderVal = progress;
+
+            }
+        });
+
 
 
         DisplayManager displayManager = (DisplayManager) getSystemService(DISPLAY_SERVICE);
@@ -215,6 +435,7 @@ public class MainActivity extends AppCompatActivity {
                     synchronized (this) {
                         setDisplayRotation();
                         mMapView.setFloorPlanData(mRenderer.getFloorPlanData());
+                        setAndroidOrientation();
                     }
                 }
 
@@ -222,14 +443,28 @@ public class MainActivity extends AppCompatActivity {
                 public void onDisplayRemoved(int displayId) {
                 }
             }, null);
+            if (hasPermission()) {
+                if (null == savedInstanceState) {
+
+                    //Instansiates the TensorflowView
+                    //setFragment();
+                }
+            } else {
+                requestPermission();
+            }
+
         }
     }
+
+
+
 
     @Override
     protected void onStart() {
         super.onStart();
-
         mTangoUx.start();
+
+        //new LongOperation().execute("");
         // Check and request camera permission at run time.
         bindTangoService();
 
@@ -238,7 +473,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-
         // Synchronize against disconnecting while the service is being used in the OpenGL
         // thread or in the UI thread.
         // NOTE: DO NOT lock against this same object in the Tango callback thread.
@@ -255,6 +489,12 @@ public class MainActivity extends AppCompatActivity {
                 Log.e(TAG, getString(R.string.exception_tango_error), e);
             }
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        //new LongOperation().execute("");
     }
 
     /**
@@ -304,6 +544,10 @@ public class MainActivity extends AppCompatActivity {
         TangoConfig config = tango.getConfig(TangoConfig.CONFIG_TYPE_DEFAULT);
         config.putBoolean(TangoConfig.KEY_BOOLEAN_DEPTH, true);
         config.putInt(TangoConfig.KEY_INT_DEPTH_MODE, TangoConfig.TANGO_DEPTH_MODE_POINT_CLOUD);
+        config.putBoolean(TangoConfig.KEY_BOOLEAN_DRIFT_CORRECTION, true);
+        tangoCameraPreview.connectToTangoCamera(mTango, TangoCameraIntrinsics.TANGO_CAMERA_COLOR);
+        //for now
+        tangoCameraPreview.setRotation(90);
         return config;
     }
 
@@ -313,7 +557,7 @@ public class MainActivity extends AppCompatActivity {
      * Listen to updates from the Point Cloud and Tango Events and Pose.
      */
     private void startupTango() {
-        ArrayList<TangoCoordinateFramePair> framePairs = new ArrayList<TangoCoordinateFramePair>();
+        final ArrayList<TangoCoordinateFramePair> framePairs = new ArrayList<TangoCoordinateFramePair>();
 
         framePairs.add(new TangoCoordinateFramePair(TangoPoseData.COORDINATE_FRAME_START_OF_SERVICE,
                 TangoPoseData.COORDINATE_FRAME_DEVICE));
@@ -364,6 +608,41 @@ public class MainActivity extends AppCompatActivity {
                             //mAverageZTextView.setText(FORMAT_THREE_DECIMAL.format(averageDepth));
                         }
                     });
+                }
+            }
+
+            @Override
+            public void onFrameAvailable(int cameraId) {
+                // We are not using onFrameAvailable for this application.
+                if (cameraId == TangoCameraIntrinsics.TANGO_CAMERA_COLOR) {
+                    tangoCameraPreview.onFrameAvailable();
+                    bm[0] = tangoCameraPreview.getBitmap();
+                    frameCount++;
+                    Log.d("FPSTango",": "+frameCount);
+                    Bitmap openCVBitmap = tangoCameraPreview.getBitmap();
+                    tmp = new Mat(openCVBitmap.getWidth(),openCVBitmap.getHeight(), CvType.CV_8UC4);
+                    mDetector.process(tmp);
+                    ////////////////////////
+
+                    List<MatOfPoint> contours = mDetector.getContours();
+                    // Log.e("rescue robotics", "Contours count: " + contours.size());
+                    Imgproc.drawContours(tmp, contours, -1, CONTOUR_COLOR);
+
+                    Mat colorLabel = tmp.submat(4, 68, 4, 68);
+                    colorLabel.setTo(mBlobColorRgba);
+
+                    Mat spectrumLabel = tmp.submat(4, 4 + mSpectrum.rows(), 70,
+                            70 + mSpectrum.cols());
+                    mSpectrum.copyTo(spectrumLabel);
+
+                    if(mDetector.blobsDetected()>0){
+                        toast("I see a Blob!");
+                    }
+                    if(frameCount == 30) {
+                        frameCount=0;
+                        scan(tangoCameraPreview.getBitmap());
+
+                    }
                 }
             }
 
@@ -597,5 +876,286 @@ public class MainActivity extends AppCompatActivity {
                 .contentColor(Color.WHITE)
                 .show();
     }
+
+
+
+
+    @Override
+    public boolean onGenericMotionEvent(MotionEvent event) {
+        // Check that the event came from a game controller
+        try {
+            if ((event.getSource() & InputDevice.SOURCE_JOYSTICK) ==
+                    InputDevice.SOURCE_JOYSTICK &&
+                    event.getAction() == MotionEvent.ACTION_MOVE) {
+
+                // Process all historical movement samples in the batch
+                final int historySize = event.getHistorySize();
+
+                // Process the movements starting from the
+                // earliest historical position in the batch
+                for (int i = 0; i < historySize; i++) {
+                    // Process the event at historical position i
+                    processJoystickInput(event, i);
+                }
+
+                // Process the current movement sample in the batch (position -1)
+                processJoystickInput(event, -1);
+                return true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return super.onGenericMotionEvent(event);
+    }
+
+    /*
+     * I'm not gonna mess with this, I'll take your word for it that it works
+     * However, I don't think we need it because of how the processJoystickInput method works
+    */
+    private static float getCenteredAxis(MotionEvent event,
+                                         InputDevice device, int axis, int historyPos) {
+        final InputDevice.MotionRange range =
+                device.getMotionRange(axis, event.getSource());
+
+        // A joystick at rest does not always report an absolute position of
+        // (0,0). Use the getFlat() method to determine the range of values
+        // bounding the joystick axis center.
+        if (range != null) {
+            final float flat = range.getFlat();
+            final float value =
+                    historyPos < 0 ? event.getAxisValue(axis) :
+                            event.getHistoricalAxisValue(axis, historyPos);
+
+            // Ignore axis values that are within the 'flat' region of the
+            // joystick axis center.
+            if (Math.abs(value) > flat) {
+                return value;
+            }
+        }
+        return 0;
+    }
+
+    //Making the joystick work, this allows X and Y Axis controls on the stick to be detected.
+    //This also enables us to then add keyevents using Dennys math to check the ammount of force each wheel must
+    //turn.
+    //   [LStick]:Forward and backwards movement.    [Rstick]: left and right turning.
+    //
+    private void processJoystickInput(MotionEvent event,
+                                      int historyPos) {
+        InputDevice mInputDevice = event.getDevice();
+
+        float x = getCenteredAxis(event, mInputDevice,
+                MotionEvent.AXIS_Z, historyPos);
+        float y = getCenteredAxis(event, mInputDevice,
+                MotionEvent.AXIS_Y, historyPos);
+        Log.d("Controller", "AnalogX:" + x);
+        Log.d("Controller", "AnalogY:" + y);
+
+        // Channel 1 STOP:64 Channel 2 STOP:192
+
+        // x = x+y
+        int rightMotor = 0, leftMotor = 0;
+
+        if (Math.round(Math.abs(55 * y)) > 0) {
+            rightMotor += Math.round(55 * y);
+            leftMotor += Math.round(55 * y);
+            if (x > 0) {
+                rightMotor -= Math.round(55 * (-x));
+                int tempSpd = leftMotor+rightMotor;
+                set_speed(1500+tempSpd);
+            } else if (x < 0) {
+                leftMotor += Math.round(55 * (-x));
+                int tempSpd = leftMotor+rightMotor;
+                set_speed(1500+800-tempSpd);
+            }
+        } else {
+            rightMotor -= Math.round(55 * (-x));
+            leftMotor += Math.round(55 * (-x));
+        }
+
+        Log.d("Controller", "Motor Left:" + leftMotor);
+        Log.d("Controller", "Motor Right:" + rightMotor);
+
+
+    }
+
+
+
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        Log.i("activity cycle","main activity being destroyed");
+
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if ((intent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {
+
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+        switch (requestCode) {
+            case PERMISSIONS_REQUEST: {
+                if (grantResults.length > 0
+                        && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                        && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+
+                } else {
+                    requestPermission();
+                }
+            }
+        }
+    }
+
+    private boolean hasPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            return checkSelfPermission(PERMISSION_CAMERA) == PackageManager.PERMISSION_GRANTED && checkSelfPermission(PERMISSION_STORAGE) == PackageManager.PERMISSION_GRANTED;
+        } else {
+            return true;
+        }
+    }
+
+    private void requestPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (shouldShowRequestPermissionRationale(PERMISSION_CAMERA) || shouldShowRequestPermissionRationale(PERMISSION_STORAGE)) {
+                Toast.makeText(MainActivity.this, "Camera AND storage permission are required for this demo", Toast.LENGTH_LONG).show();
+            }
+            requestPermissions(new String[] {PERMISSION_CAMERA, PERMISSION_STORAGE}, PERMISSIONS_REQUEST);
+        }
+    }
+
+
+    private void setAndroidOrientation() {
+        Display display = getWindowManager().getDefaultDisplay();
+        Camera.CameraInfo depthCameraInfo = new Camera.CameraInfo();
+        Camera.getCameraInfo(1, depthCameraInfo);
+
+        int depthCameraRotation = Surface.ROTATION_0;
+        switch(depthCameraInfo.orientation) {
+            case 90:
+                depthCameraRotation = Surface.ROTATION_90;
+                break;
+            case 180:
+                depthCameraRotation = Surface.ROTATION_180;
+                break;
+            case 270:
+                depthCameraRotation = Surface.ROTATION_270;
+                break;
+        }
+
+        mDepthCameraToDisplayRotation = display.getRotation() - depthCameraRotation;
+        if (mDepthCameraToDisplayRotation < 0) {
+            mDepthCameraToDisplayRotation += 4;
+        }
+    }
+
+    private void toast(final String message) {
+        final Context context = this;
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(context, message, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    //Scan for QR code and save information to phone
+    public String scan(Bitmap bMap) {
+        int[] intArray = new int[bMap.getWidth()*bMap.getHeight()];
+        //copy pixel data from the Bitmap into the 'intArray' array
+        bMap.getPixels(intArray, 0, bMap.getWidth(), 0, 0, bMap.getWidth(), bMap.getHeight());
+
+        LuminanceSource source = new RGBLuminanceSource(bMap.getWidth(), bMap.getHeight(),intArray);
+
+        BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
+        Reader reader = new QRCodeReader();
+
+        String text;
+
+        try {
+            Result result = reader.decode(bitmap);
+            text = result.getText();
+
+            //Toasts the Info
+            toast(text+" "+result);
+            textToSpeech.speak(text,TextToSpeech.QUEUE_FLUSH,null);
+            mRenderer.setTrueMarker();
+            Calendar calendar = Calendar.getInstance();
+            java.util.Date now = calendar.getTime();
+            java.sql.Timestamp currentTimestamp = new java.sql.Timestamp(now.getTime());
+            String time = currentTimestamp.toString();
+            String info = text;
+
+            try {
+                File newFolder = new File(Environment.getExternalStorageDirectory(), "RescueRobotics");
+                if (!newFolder.exists()) {
+                    newFolder.mkdir();
+                }
+                try {
+                    File file = new File(newFolder, time + ".txt");
+                    file.createNewFile();
+                    FileOutputStream fos=new FileOutputStream(file);
+                    try {
+                        byte[] b = info.getBytes();
+                        fos.write(b);
+                        fos.close();
+                        ToneGenerator toneG = new ToneGenerator(AudioManager.STREAM_ALARM, 100);
+                        toneG.startTone(ToneGenerator.TONE_CDMA_PIP, 200);
+                    } catch (IOException e) {
+                        Log.e("app.main","Couldn't write to SD");
+                    }
+                } catch (Exception ex) {
+                    Log.e("app.main","Couldn't write to SD");
+                }
+            } catch (Exception e) {
+                Log.e("app.main","Couldn't write to SD");
+            }
+            Log.i("rescue robotics",text);
+            return text;
+        } catch (NotFoundException e) {
+            e.printStackTrace();
+            text = "no code found";
+        } catch (ChecksumException e) {
+            e.printStackTrace();
+            text =  "checksum error";
+        } catch (FormatException e) {
+            e.printStackTrace();
+            text = "format error";
+        }
+        Log.i("rescue robotics",text);
+
+        return text;
+    }
+
+    //IOIO Funcs
+    public synchronized void set_speed(int speed)
+    {
+        pwm_speed = speed;
+        if(pwm_speed > MAX_PWM) pwm_speed = MAX_PWM;
+        else if(pwm_speed < MIN_PWM) pwm_speed = MIN_PWM;
+    }
+
+    public synchronized void set_steering(int steering)
+    {
+        pwm_steering = steering;
+        if(pwm_steering > MAX_PWM) pwm_steering = MAX_PWM;
+        else if(pwm_steering < MIN_PWM) pwm_steering = MIN_PWM;
+    }
+
+    public synchronized int get_speed()
+    {
+        return pwm_speed;
+    }
+
+    public synchronized int get_steering()
+    {
+        return pwm_steering;
+    }
+
 
 }
