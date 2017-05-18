@@ -74,17 +74,15 @@ import com.google.zxing.qrcode.QRCodeReader;
 import com.projecttango.examples.java.pointcloud.Data.MapView;
 import com.projecttango.examples.java.pointcloud.MapViewTools.MapInfo;
 import com.projecttango.examples.java.pointcloud.OpenCV.ColorBlobDetector;
+import com.projecttango.examples.java.pointcloud.Robot.Robot;
 import com.projecttango.tangosupport.TangoPointCloudManager;
 import com.projecttango.tangosupport.TangoSupport;
 import com.projecttango.tangosupport.ux.TangoUx;
 import com.projecttango.tangosupport.ux.UxExceptionEvent;
 import com.projecttango.tangosupport.ux.UxExceptionEventListener;
 
-import org.opencv.core.CvType;
 import org.opencv.core.Mat;
-import org.opencv.core.MatOfPoint;
 import org.opencv.core.Scalar;
-import org.opencv.imgproc.Imgproc;
 import org.rajawali3d.scene.ASceneFrameCallback;
 import org.rajawali3d.surface.RajawaliSurfaceView;
 
@@ -95,7 +93,6 @@ import java.nio.FloatBuffer;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.List;
 import java.util.Locale;
 
 import ioio.lib.api.AnalogInput;
@@ -169,13 +166,13 @@ public class MainActivity extends IOIOActivity{
     int frameCount = 0;
 
     //IOIO
-    private PwmOutput pwm_speed_output, pwm_steering_output, pwm_pan_output, pwm_tilt_output;
+    public PwmOutput pwm_speed_output, pwm_steering_output, pwm_pan_output, pwm_tilt_output;
     int pwm_pan, pwm_tilt, pwm_speed, pwm_steering;
     private AnalogInput sonar1,sonar2,sonar3;
     int sonarPulseCounter;
     private DigitalOutput sonar_pulse;
     int sonar1_reading, sonar2_reading, sonar3_reading;
-    static final int DEFAULT_PWM = 1500, MAX_PWM = 2000, MIN_PWM = 1000;
+    public final int DEFAULT_PWM = 1500, MAX_PWM = 2000, MIN_PWM = 1000;
 
     public Mat tmp;
     private ColorBlobDetector mDetector;
@@ -186,6 +183,9 @@ public class MainActivity extends IOIOActivity{
     private SeekBar mMotorbar;
     private int motorSliderVal;
 
+    private Robot mRobot;
+    private boolean isAuto;
+    //TODO: isAuto toggle should be assigned to a button on the controller
 
 
     class Looper extends BaseIOIOLooper {
@@ -228,6 +228,10 @@ public class MainActivity extends IOIOActivity{
          */
         @Override
         public void loop() throws ConnectionLostException, InterruptedException {
+
+            if(pointcloud sees a wall)
+
+            mRobot.update();
 
             if(pwm_speed > MAX_PWM) pwm_speed = MAX_PWM;
             else if(pwm_speed < MIN_PWM) pwm_speed = MIN_PWM;
@@ -290,8 +294,8 @@ public class MainActivity extends IOIOActivity{
         setContentView(R.layout.activity_point_cloud);
 
         //IOIO
-        pwm_speed = 1500;
-        pwm_steering = 1500;
+        pwm_speed = DEFAULT_PWM;
+        pwm_steering = DEFAULT_PWM;
 
         mDetector = new ColorBlobDetector();
         mSpectrum = new Mat();
@@ -301,6 +305,8 @@ public class MainActivity extends IOIOActivity{
         //mDetector.setHsvColor(new Scalar(7, 196, 144)); // red
         //mDetector.setHsvColor(new Scalar(253.796875,222.6875,195.21875));
         mDetector.setHsvColor(new Scalar(7.015625,255.0,239.3125)); //bucket orange
+
+        mRobot = new Robot(this);
 
 
         mSurfaceView = (RajawaliSurfaceView) findViewById(R.id.gl_surface_view);
@@ -401,8 +407,8 @@ public class MainActivity extends IOIOActivity{
             public void onStopTrackingTouch(SeekBar seekBar) {
                 // TODO Auto-generated method stub
                 toast("MotorVal: "+motorSliderVal);
-                set_speed(1500+motorSliderVal);
-                set_steering(1500);
+                set_speed(1500);
+                set_steering(1500+motorSliderVal);
 
             }
 
@@ -619,26 +625,7 @@ public class MainActivity extends IOIOActivity{
                     bm[0] = tangoCameraPreview.getBitmap();
                     frameCount++;
                     Log.d("FPSTango",": "+frameCount);
-                    Bitmap openCVBitmap = tangoCameraPreview.getBitmap();
-                    tmp = new Mat(openCVBitmap.getWidth(),openCVBitmap.getHeight(), CvType.CV_8UC4);
-                    mDetector.process(tmp);
-                    ////////////////////////
-
-                    List<MatOfPoint> contours = mDetector.getContours();
-                    // Log.e("rescue robotics", "Contours count: " + contours.size());
-                    Imgproc.drawContours(tmp, contours, -1, CONTOUR_COLOR);
-
-                    Mat colorLabel = tmp.submat(4, 68, 4, 68);
-                    colorLabel.setTo(mBlobColorRgba);
-
-                    Mat spectrumLabel = tmp.submat(4, 4 + mSpectrum.rows(), 70,
-                            70 + mSpectrum.cols());
-                    mSpectrum.copyTo(spectrumLabel);
-
-                    if(mDetector.blobsDetected()>0){
-                        toast("I see a Blob!");
-                    }
-                    if(frameCount == 30) {
+                    if(frameCount == 15) {
                         frameCount=0;
                         scan(tangoCameraPreview.getBitmap());
 
