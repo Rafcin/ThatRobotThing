@@ -187,6 +187,8 @@ public class MainActivity extends IOIOActivity{
     private boolean isAuto;
     //TODO: isAuto toggle should be assigned to a button on the controller
 
+    public double pointcloudDepthInfo;
+
 
     class Looper extends BaseIOIOLooper {
 
@@ -229,7 +231,7 @@ public class MainActivity extends IOIOActivity{
         @Override
         public void loop() throws ConnectionLostException, InterruptedException {
 
-            if(pointcloud sees a wall)
+            //if(pointcloud sees a wall)
 
             mRobot.update();
 
@@ -307,6 +309,8 @@ public class MainActivity extends IOIOActivity{
         mDetector.setHsvColor(new Scalar(7.015625,255.0,239.3125)); //bucket orange
 
         mRobot = new Robot(this);
+
+        mAverageZTextView = (TextView) findViewById(R.id.average_z_textview);
 
 
         mSurfaceView = (RajawaliSurfaceView) findViewById(R.id.gl_surface_view);
@@ -607,11 +611,13 @@ public class MainActivity extends IOIOActivity{
                     mPointCloudTimeToNextUpdate = UPDATE_INTERVAL_MS;
                     final String pointCountString = Integer.toString(pointCloud.numPoints);
 
+                    calculateAveragedDepth(pointCloud.points, pointCloud.numPoints);
+
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             //mPointCountTextView.setText(pointCountString);
-                            //mAverageZTextView.setText(FORMAT_THREE_DECIMAL.format(averageDepth));
+                            mAverageZTextView.setText(FORMAT_THREE_DECIMAL.format(averageDepth));
                         }
                     });
                 }
@@ -1144,5 +1150,17 @@ public class MainActivity extends IOIOActivity{
         return pwm_steering;
     }
 
+    private float calculateAveragedDepth(FloatBuffer pointCloudBuffer, int numPoints) {
+        float totalZ = 0;
+        float averageZ = 0;
+        if (numPoints != 0) {
+            int numFloats = 4 * numPoints;
+            for (int i = 2; i < numFloats; i = i + 4) {
+                totalZ = totalZ + pointCloudBuffer.get(i);
+            }
+            averageZ = totalZ / numPoints;
+        }
+        return averageZ;
+    }
 
 }

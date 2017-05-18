@@ -74,4 +74,12 @@
         android:id="@+id/motorBar"
         android:max="1500"/>
 
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="125px"
+        android:id="@+id/average_z_textview"
+        android:textColor="@color/primary"
+        android:layout_below="@id/toggleMotors"
+        />
+
 </RelativeLayout>
