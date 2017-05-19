@@ -647,7 +647,9 @@ public class MainActivity extends IOIOActivity{
                 mPointCloudTimeToNextUpdate -= pointCloudFrameDelta;
 
                 calculateAveragedDepth(pointCloud.points, pointCloud.numPoints);
-                pointCloud.points.get(pcarray);
+                if(pointCloud != null) {
+                    pointCloud.points.get(pcarray);
+                }
                 float groundHeight = 1.0f;
                 float avgX = 0.0f;
                 float avgY = 0.0f;
@@ -1289,11 +1291,7 @@ public class MainActivity extends IOIOActivity{
     private float calculateAveragedDepth(FloatBuffer pointCloudBuffer, int numPoints) {
         float totalZ = 0;
         float averageZ = 0;
-        if(pcarray != null) {
-            pcarray = new float[pointCloudBuffer.capacity()];
-        }else{
-
-        }
+        pcarray = new float[pointCloudBuffer.capacity()];
         if (numPoints != 0) {
             int numFloats = 4 * numPoints;
             for (int i = 2; i < numFloats; i = i + 4) {
