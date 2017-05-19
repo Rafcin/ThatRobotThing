@@ -20,10 +20,13 @@ public class Robot {
 
     private double[] position;
     private double[] orientation;
-    private ArrayList<Bucket> bucket;
+    private ArrayList<Bucket> buckets;
     private int speed,turning;
     private MainActivity mMainActivity;
     public final String TAG = "ROBOT";
+
+    private int wandering_timer;
+    private int current_target_index;
 
         /*
          * position is a 2D vector {x, y}
@@ -42,7 +45,8 @@ public class Robot {
         orientation = new double[] {0, 0};
         speed = mMainActivity.DEFAULT_PWM;
         turning = mMainActivity.DEFAULT_PWM;
-        bucket = new ArrayList<>();
+        buckets = new ArrayList<>();
+        wandering_timer = 0;
     }
 
     public void onBucketSighting(double distance) {
@@ -53,21 +57,21 @@ public class Robot {
         addBucket(predLocation);
     }
     public void addBucket(double[] location) {
-        bucket.add(new Bucket(location));
+        buckets.add(new Bucket(location));
         Log.d(TAG, "Bucket sighting: (" + location[0] + ", " + location[1] + ")");
     }
 
     /*
-     * returns the index in ArrayList of the nearest bucket we've sighted.
+     * returns the index in ArrayList of the nearest buckets we've sighted.
      * returns -1 if no buckets have been sighted.
      */
-    public int nearestBucketIndex() {
+    public int nearestUnscannedBucketIndex() {
         double smallestDistance = (double) Integer.MAX_VALUE;
         int index = -1;
         double distance;
-        for(int i = 0; i < bucket.size(); i++) {
-            distance = distance(bucket.get(i).location());
-            if(distance < smallestDistance) {
+        for(int i = 0; i < buckets.size(); i++) {
+            distance = distance(buckets.get(i).location());
+            if(distance < smallestDistance && !buckets.get(i).isScanned()) {
                 smallestDistance = distance;
                 index = i;
             }
@@ -75,15 +79,23 @@ public class Robot {
         return index;
     }
 
+    public void updatePose(double[] vector, double[] complex) {
+        orientation = complex;
+        position = vector;
+    }
+
     public void update() {
         Log.d(TAG,"onUpdate");
+
         //if we've seen any buckets, go to the closest one
-        if(bucket.size() > 0)
-            gotoBucketLocation(nearestBucketIndex());
+        current_target_index = nearestUnscannedBucketIndex();
+        if(buckets.size() > 0 && current_target_index != -1)
+            gotoBucketLocation(current_target_index);
         //otherwise, wander around until we have.
-        else {
-//            setSpeed(300);
-//            setSteering(200);
+        else if(buckets.size()==0){
+            setSteering(75);
+            setSpeed(wandering_timer++);
+            mMainActivity.constrainMotorValues();
         }
     }
 
@@ -95,7 +107,7 @@ public class Robot {
          */
 
     public void gotoBucketLocation(int bucketIndex) {
-        double[] target = bucket.get(bucketIndex).location();
+        double[] target = buckets.get(bucketIndex).location();
         Log.d(TAG,"Going to location: (" + target[0] + ", " + target[1] + ")");
         double angleTolerance = 5;
         //target[0] = x
@@ -117,9 +129,8 @@ public class Robot {
         else {
             setSpeed(0);
             setSteering(0);
-            mMainActivity.addRajBucket();
             mMainActivity.safeSleep(2000);
-
+            mMainActivity.addRajBucket();
             //turn the robot around
             targetOrientation = new double[] {
                     -orientation[0],

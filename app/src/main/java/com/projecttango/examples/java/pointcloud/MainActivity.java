@@ -250,6 +250,10 @@ public class MainActivity extends IOIOActivity{
         @Override
         public void loop() throws ConnectionLostException, InterruptedException {
 
+            mRobot.updatePose(mapPos.translation, new double[] {
+                    mapPos.rotation[1],
+                    mapPos.rotation[2]});
+
             if(isAuto) {
                 mRobot.update();
             }
@@ -659,25 +663,27 @@ public class MainActivity extends IOIOActivity{
                 for(int i = 0; i < pcarray.length; i+= 4) {
                     //check that the points are both above the floor and close enough
                     //because points on the floor can be close enough and would give you a false positive
-                    if (pcarray[i ] > 0.0f && pcarray[i + 2] < 1.0f){
+                    if (pcarray[i ] > 0.0f && pcarray[i + 2] < 0.2f){
                         iLikePoints = true;
+
                         avgX += pcarray[i ];
                         avgY += pcarray[i+1 ];
                         avgZ += pcarray[i+2 ];
                         avg += 1.0f;
                         //DO NOT ADD LOGS IN THE FOR LOOP IT WILL CRASH
                     }
-                    if (Math.abs(pcarray[i ]) < 0.05f && Math.abs(pcarray[i + 1]) < 0.05f && pcarray[i + 2] < 0.5f){
+                    if (Math.abs(pcarray[i ]) < 0.5f && Math.abs(pcarray[i + 1]) < 3 && pcarray[i + 2] < 0.5f){
                         //that will detect if any points are closer than half a meter, and within a 50cm cube pointing out from infront of the depth camera
                         //so checking absolute X is less than 0.05, will be true if a point is less than 50cm to the left or right of the depth camera
+                        mRobot.onBucketSighting(pcarray[i+1]);
                     }
                 }
                 //gets an average of all the points that the if statement returns as true
-                if(avg > 0.0f){
-                    avgX /= avg;
-                    avgY /= avg;
-                    avgZ /= avg;
-                }
+//                if(avg > 0.0f){
+//                    avgX /= avg;
+//                    avgY /= avg;
+//                    avgZ /= avg;
+//                }
 
                 if (mPointCloudTimeToNextUpdate < 0.0) {
                     mPointCloudTimeToNextUpdate = UPDATE_INTERVAL_MS;
@@ -715,7 +721,7 @@ public class MainActivity extends IOIOActivity{
                     Log.d("FPSTango",": "+frameCount);
                     if(frameCount == 15) {
                         frameCount=0;
-                        scan(tangoCameraPreview.getBitmap());
+                        //scan(tangoCameraPreview.getBitmap());
 
                     }
                 }
