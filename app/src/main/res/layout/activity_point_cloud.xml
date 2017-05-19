@@ -43,12 +43,24 @@
         android:paddingLeft="@dimen/activity_horizontal_margin"
         />
 
+    <SeekBar
+        android:layout_width="match_parent"
+        android:layout_height="125px"
+        android:id="@+id/motorBar"
+        android:max="1500"/>
+    <SeekBar
+        android:layout_width="match_parent"
+        android:layout_height="125px"
+        android:id="@+id/speedBar"
+        android:layout_below="@id/motorBar"
+        android:max="1500"/>
+
     <Button
         android:layout_width="320px"
         android:layout_height="125px"
         android:id="@+id/setStartPoint"
         android:text="StartPoint"
-        android:layout_below="@id/mainToolBar"
+        android:layout_below="@id/speedBar"
         />
     <Button
         android:layout_width="320px"
@@ -68,18 +80,21 @@
         android:layout_height="125px"
         android:id="@+id/toggleMotors"
         android:layout_below="@id/togglePointCloud"/>
-    <SeekBar
-        android:layout_width="match_parent"
+
+    <Button
+        android:layout_width="320px"
         android:layout_height="125px"
-        android:id="@+id/motorBar"
-        android:max="1500"/>
+        android:id="@+id/autonMode"
+        android:text="Auto"
+        android:layout_below="@id/toggleMotors"/>
 
     <TextView
         android:layout_width="match_parent"
         android:layout_height="125px"
         android:id="@+id/average_z_textview"
         android:textColor="@color/primary"
-        android:layout_below="@id/toggleMotors"
+        android:layout_below="@id/autonMode"
         />
+
 
 </RelativeLayout>

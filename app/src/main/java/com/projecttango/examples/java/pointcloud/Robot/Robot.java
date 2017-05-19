@@ -75,8 +75,8 @@ public class Robot {
             gotoLocation(nearestBucket().location());
         //otherwise, wander around until we have.
         else {
-            setSpeed(300);
-            setSteering(200);
+//            setSpeed(300);
+//            setSteering(200);
         }
     }
 
@@ -109,22 +109,14 @@ public class Robot {
     }
 
     public void faceLocation(double[] targetOrientation, double tolerance) {
-        double tolerance1 = 90;
-        double tolerance2 = 45;
+//        double tolerance1 = 90;
+//        double tolerance2 = 45;
         double angle = Math.atan2(targetOrientation[1], targetOrientation[0])
                 - Math.atan2(orientation[1], orientation[0]);
         Log.d(TAG, "Delta Angle: " + angle);
-        if(Math.abs(angle) <= tolerance1) {
-            setSteering(0);
-        }
-        else if(Math.abs(angle) > tolerance1) {
-            setSteering((int) (angle*4)); //sign may need to be flipped
-        }
-        else if(Math.abs(angle) > tolerance2) {
-            setSteering((int) (angle*3)); //sign needs to be same as above
-        }
-        else if(Math.abs(angle) > tolerance) {
-            setSteering((int) (Math.signum(angle)*100));
+
+        if(Math.abs(angle) > tolerance) {
+            setSteering((int)Math.round(angle));
         }
 
     }

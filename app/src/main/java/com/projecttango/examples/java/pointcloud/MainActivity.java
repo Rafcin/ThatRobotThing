@@ -34,6 +34,7 @@ import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Display;
 import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.View;
@@ -112,6 +113,8 @@ import ioio.lib.util.android.IOIOActivity;
 public class MainActivity extends IOIOActivity{
     private static final String TAG = MainActivity.class.getSimpleName();
 
+    public static final int BUTTON_B = 97, BUTTON_A = 96;
+
     private static final String UX_EXCEPTION_EVENT_DETECTED = "Exception Detected: ";
     private static final String UX_EXCEPTION_EVENT_RESOLVED = "Exception Resolved: ";
 
@@ -180,14 +183,24 @@ public class MainActivity extends IOIOActivity{
     private Mat mSpectrum;
     private Scalar CONTOUR_COLOR;
 
-    private SeekBar mMotorbar;
-    private int motorSliderVal;
+    private SeekBar mSteeringBar;
+    private SeekBar mSpeedBar;
+    private int steeringSliderVal;
+    private int speedSliderVal;
 
     private Robot mRobot;
     private boolean isAuto;
+
     //TODO: isAuto toggle should be assigned to a button on the controller
 
-    public double pointcloudDepthInfo;
+
+    public void constrainMotorValues() {
+        if(pwm_speed > MAX_PWM) pwm_speed = MAX_PWM;
+        else if(pwm_speed < MIN_PWM) pwm_speed = MIN_PWM;
+
+        if(pwm_steering > MAX_PWM) pwm_steering = MAX_PWM;
+        else if(pwm_steering < MIN_PWM) pwm_steering = MIN_PWM;
+    }
 
 
     class Looper extends BaseIOIOLooper {
@@ -208,17 +221,19 @@ public class MainActivity extends IOIOActivity{
         @Override
         protected void setup() throws ConnectionLostException {
             toast("In IOIO Setup");
+            isAuto = false;
             led_ = ioio_.openDigitalOutput(0, true);
 
             pwm_speed_output = ioio_.openPwmOutput(3, 50); //motor channel 4: front left
             pwm_steering_output = ioio_.openPwmOutput(4, 50); //motor channel 3: back left
 
-            pwm_speed_output.setPulseWidth(1500);
-            pwm_steering_output.setPulseWidth(1500);
+            pwm_speed_output.setPulseWidth(DEFAULT_PWM);
+            pwm_steering_output.setPulseWidth(DEFAULT_PWM);
 
 
             showVersions(ioio_, "IOIO connected!");
         }
+
 
         /**
          * Called repetitively while the IOIO is connected.
@@ -231,15 +246,11 @@ public class MainActivity extends IOIOActivity{
         @Override
         public void loop() throws ConnectionLostException, InterruptedException {
 
-            //if(pointcloud sees a wall)
+            if(isAuto) {
+                mRobot.update();
+            }
 
-            mRobot.update();
-
-            if(pwm_speed > MAX_PWM) pwm_speed = MAX_PWM;
-            else if(pwm_speed < MIN_PWM) pwm_speed = MIN_PWM;
-
-            if(pwm_steering > MAX_PWM) pwm_steering = MAX_PWM;
-            else if(pwm_steering < MIN_PWM) pwm_steering = MIN_PWM;
+            constrainMotorValues();
 
             ioio_.beginBatch();
             try
@@ -250,7 +261,6 @@ public class MainActivity extends IOIOActivity{
             }
             catch (InterruptedException e){ ioio_.disconnect();}
             finally{ ioio_.endBatch();}
-
 
         }
 
@@ -404,15 +414,14 @@ public class MainActivity extends IOIOActivity{
             }
         });
 
-        mMotorbar = (SeekBar)findViewById(R.id.motorBar); // make seekbar object
-        mMotorbar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        mSteeringBar = (SeekBar)findViewById(R.id.motorBar); // make seekbar object
+        mSteeringBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
 
             @Override
             public void onStopTrackingTouch(SeekBar seekBar) {
                 // TODO Auto-generated method stub
-                toast("MotorVal: "+motorSliderVal);
-                set_speed(1500);
-                set_steering(1500+motorSliderVal);
+                toast("MotorVal: "+ steeringSliderVal);
+//                set_steering(2*steeringSliderVal);
 
             }
 
@@ -426,7 +435,33 @@ public class MainActivity extends IOIOActivity{
             public void onProgressChanged(SeekBar seekBar, int progress,
                                           boolean fromUser) {
                 // TODO Auto-generated method stub
-                motorSliderVal = progress;
+                steeringSliderVal = progress;
+
+            }
+        });
+
+        mSpeedBar = (SeekBar)findViewById(R.id.speedBar); // make seekbar object
+        mSpeedBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // TODO Auto-generated method stub
+                toast("SpeedVal: "+ speedSliderVal);
+//                set_speed(2*speedSliderVal);
+
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // TODO Auto-generated method stub
+
+            }
+
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress,
+                                          boolean fromUser) {
+                // TODO Auto-generated method stub
+                speedSliderVal = progress;
 
             }
         });
@@ -870,7 +905,43 @@ public class MainActivity extends IOIOActivity{
                 .show();
     }
 
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        boolean handled = false;
 
+        //if (event.getRepeatCount() == 0) {
+        Log.d(TAG, "I was pushed KEY:" + keyCode);
+        if (keyCode == 19) {
+            Log.d(TAG, "UP!" + keyCode);
+        }
+        if (keyCode == 20) {
+            Log.d(TAG, "DOWN!" + keyCode);
+        }
+        if (keyCode == 21) {
+            Log.d(TAG, "LEFT!" + keyCode);
+        }
+        if (keyCode == 22) {
+            Log.d(TAG, "RIGHT!!" + keyCode);
+        }
+        if (keyCode == 102) {
+            Log.d(TAG, "STOP!!" + keyCode);
+        }
+        if(keyCode == BUTTON_B) {
+            isAuto = !isAuto;
+            Log.d(TAG, "AutoAT:"+isAuto);
+
+        }
+        if(keyCode == BUTTON_A) {
+            Log.d(TAG, "Pausing AI!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            // 96=A
+        }
+
+        if(keyCode == 99) {
+            Log.d(TAG, "Restarting AI!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+        }
+
+        return handled;
+    }
 
 
     @Override
@@ -929,7 +1000,7 @@ public class MainActivity extends IOIOActivity{
     }
 
     //Making the joystick work, this allows X and Y Axis controls on the stick to be detected.
-    //This also enables us to then add keyevents using Dennys math to check the ammount of force each wheel must
+    //This also enables us to then add keyevents using Dennys math to check the amount of force each wheel must
     //turn.
     //   [LStick]:Forward and backwards movement.    [Rstick]: left and right turning.
     //
@@ -944,30 +1015,31 @@ public class MainActivity extends IOIOActivity{
         Log.d("Controller", "AnalogX:" + x);
         Log.d("Controller", "AnalogY:" + y);
 
-        // Channel 1 STOP:64 Channel 2 STOP:192
+        setSpeed(Math.round(-500*y));
+        setSteering(Math.round(200*x));
 
-        // x = x+y
-        int rightMotor = 0, leftMotor = 0;
-
-        if (Math.round(Math.abs(55 * y)) > 0) {
-            rightMotor += Math.round(55 * y);
-            leftMotor += Math.round(55 * y);
-            if (x > 0) {
-                rightMotor -= Math.round(55 * (-x));
-                int tempSpd = leftMotor+rightMotor;
-                set_speed(1500+tempSpd);
-            } else if (x < 0) {
-                leftMotor += Math.round(55 * (-x));
-                int tempSpd = leftMotor+rightMotor;
-                set_speed(1500+800-tempSpd);
-            }
-        } else {
-            rightMotor -= Math.round(55 * (-x));
-            leftMotor += Math.round(55 * (-x));
-        }
-
-        Log.d("Controller", "Motor Left:" + leftMotor);
-        Log.d("Controller", "Motor Right:" + rightMotor);
+//        // x = x+y
+//        int rightMotor = 0, leftMotor = 0;
+//
+//        if (Math.round(Math.abs(500 * y)) > 0) {
+//            rightMotor += Math.round(500 * y);
+//            leftMotor += Math.round(500 * y);
+//            if (x > 0) {
+//                rightMotor -= Math.round(500 * (-x));
+//                int tempSpd = leftMotor+rightMotor;
+//                set_speed(1500+tempSpd);
+//            } else if (x < 0) {
+//                leftMotor += Math.round(500 * (-x));
+//                int tempSpd = leftMotor+rightMotor;
+//                set_speed(1500+800-tempSpd);
+//            }
+//        } else {
+//            rightMotor -= Math.round(500 * (-x));
+//            leftMotor += Math.round(500 * (-x));
+//        }
+//
+//        Log.d("Controller", "Motor Left:" + leftMotor);
+//        Log.d("Controller", "Motor Right:" + rightMotor);
 
 
     }
@@ -1139,6 +1211,19 @@ public class MainActivity extends IOIOActivity{
         if(pwm_steering > MAX_PWM) pwm_steering = MAX_PWM;
         else if(pwm_steering < MIN_PWM) pwm_steering = MIN_PWM;
     }
+
+    /*
+     * denny's way of doing it (the right way)
+     */
+    public synchronized void setSpeed(int s) {
+        set_speed(DEFAULT_PWM + s);
+    }
+    public synchronized void setSteering(int s) {
+        set_steering(DEFAULT_PWM + s);
+    }
+    /*
+     *
+     */
 
     public synchronized int get_speed()
     {
