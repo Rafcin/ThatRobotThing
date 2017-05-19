@@ -155,6 +155,7 @@ public class MainActivity extends IOIOActivity{
 
     private TextToSpeech textToSpeech;
 
+
     private TangoTextureCameraPreview tangoCameraPreview;
 
     private int mDepthCameraToDisplayRotation = 0;
@@ -191,7 +192,10 @@ public class MainActivity extends IOIOActivity{
     private Robot mRobot;
     private boolean isAuto;
 
-    //TODO: isAuto toggle should be assigned to a button on the controller
+    float[] pcarray;
+
+    private TextView likePoints;
+    boolean iLikePoints = false;
 
 
     public void constrainMotorValues() {
@@ -322,7 +326,7 @@ public class MainActivity extends IOIOActivity{
 
         mAverageZTextView = (TextView) findViewById(R.id.average_z_textview);
 
-
+        likePoints = (TextView)findViewById(R.id.likePointsTxt);
         mSurfaceView = (RajawaliSurfaceView) findViewById(R.id.gl_surface_view);
 
         textToSpeech = new TextToSpeech(MainActivity.this, new TextToSpeech.OnInitListener() {
@@ -642,17 +646,58 @@ public class MainActivity extends IOIOActivity{
 
                 mPointCloudTimeToNextUpdate -= pointCloudFrameDelta;
 
+                calculateAveragedDepth(pointCloud.points, pointCloud.numPoints);
+                pointCloud.points.get(pcarray);
+                float groundHeight = 1.0f;
+                float avgX = 0.0f;
+                float avgY = 0.0f;
+                float avgZ = 0.0f;
+                float avg = 0.0f;
+                // i=x i+1=y i+2=z i+3 == C(confidence) i+4=nextX
+                for(int i = 0; i < pcarray.length; i+= 4) {
+                    //check that the points are both above the floor and close enough
+                    //because points on the floor can be close enough and would give you a false positive
+                    if (pcarray[i ] > 0.0f && pcarray[i + 2] < 1.0f){
+                        iLikePoints = true;
+                        avgX += pcarray[i ];
+                        avgY += pcarray[i+1 ];
+                        avgZ += pcarray[i+2 ];
+                        avg += 1.0f;
+                        //DO NOT ADD LOGS IN THE FOR LOOP IT WILL CRASH
+                    }
+                    if (Math.abs(pcarray[i ]) < 0.05f && Math.abs(pcarray[i + 1]) < 0.05f && pcarray[i + 2] < 0.5f){
+                        //that will detect if any points are closer than half a meter, and within a 50cm cube pointing out from infront of the depth camera
+                        //so checking absolute X is less than 0.05, will be true if a point is less than 50cm to the left or right of the depth camera
+                    }
+                }
+                //gets an average of all the points that the if statement returns as true
+                if(avg > 0.0f){
+                    avgX /= avg;
+                    avgY /= avg;
+                    avgZ /= avg;
+                }
+
                 if (mPointCloudTimeToNextUpdate < 0.0) {
                     mPointCloudTimeToNextUpdate = UPDATE_INTERVAL_MS;
                     final String pointCountString = Integer.toString(pointCloud.numPoints);
-
-                    calculateAveragedDepth(pointCloud.points, pointCloud.numPoints);
 
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             //mPointCountTextView.setText(pointCountString);
                             mAverageZTextView.setText(FORMAT_THREE_DECIMAL.format(averageDepth));
+                            if(iLikePoints) {
+                                Log.d("PointInfo", "I like points");
+                                likePoints.setTextColor(Color.GREEN);
+                                likePoints.setText("Like");
+                            }
+                            else {
+                                Log.d("PointInfo", "I don't like points");
+                                likePoints.setTextColor(Color.RED);
+                                likePoints.setText("DisLike");
+
+
+                            }
                         }
                     });
                 }
@@ -1015,8 +1060,11 @@ public class MainActivity extends IOIOActivity{
         Log.d("Controller", "AnalogX:" + x);
         Log.d("Controller", "AnalogY:" + y);
 
-        setSpeed(Math.round(-500*y));
-        setSteering(Math.round(200*x));
+
+        if(!isAuto) {
+            setSpeed(Math.round(-500 * y));
+            setSteering(Math.round(200 * x));
+        }
 
 //        // x = x+y
 //        int rightMotor = 0, leftMotor = 0;
@@ -1149,7 +1197,6 @@ public class MainActivity extends IOIOActivity{
             //Toasts the Info
             toast(text+" "+result);
             textToSpeech.speak(text,TextToSpeech.QUEUE_FLUSH,null);
-            mRenderer.setTrueMarker();
             Calendar calendar = Calendar.getInstance();
             java.util.Date now = calendar.getTime();
             java.sql.Timestamp currentTimestamp = new java.sql.Timestamp(now.getTime());
@@ -1197,6 +1244,10 @@ public class MainActivity extends IOIOActivity{
         return text;
     }
 
+    public void addRajBucket(){
+        mRenderer.setTrueMarker();
+    }
+
     //IOIO Funcs
     public synchronized void set_speed(int speed)
     {
@@ -1238,6 +1289,11 @@ public class MainActivity extends IOIOActivity{
     private float calculateAveragedDepth(FloatBuffer pointCloudBuffer, int numPoints) {
         float totalZ = 0;
         float averageZ = 0;
+        if(pcarray != null) {
+            pcarray = new float[pointCloudBuffer.capacity()];
+        }else{
+
+        }
         if (numPoints != 0) {
             int numFloats = 4 * numPoints;
             for (int i = 2; i < numFloats; i = i + 4) {
@@ -1246,6 +1302,13 @@ public class MainActivity extends IOIOActivity{
             averageZ = totalZ / numPoints;
         }
         return averageZ;
+    }
+    public void safeSleep(int t) {
+        try {
+            Thread.sleep(t);
+        } catch(InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
 }

@@ -9,4 +9,7 @@
     <color name="icons">#FFFFFF</color>
     <color name="divider">#B6B6B6</color>
     <color name="debug_bg">#66000000</color>
+    <color name="green">#ee047c0c</color>
+    <color name="red">#dce70505</color>
+
 </resources>

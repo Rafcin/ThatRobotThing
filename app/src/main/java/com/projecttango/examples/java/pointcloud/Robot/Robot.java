@@ -28,10 +28,10 @@ public class Robot {
         /*
          * position is a 2D vector {x, y}
          * * in your actual code, position should be the tango pose data, which needs to be updated during
-         * * the gotoLocation algorithm
+         * * the gotoBucketLocation algorithm
          * orientation is a complex number (a + bi) ==> {a, b}
          * * in your actual code, orientation should be the tango pose data, which needs to be updated during
-         * * the gotoLocation algorithm
+         * * the gotoBucketLocation algorithm
          * you can simplify the quaternion w, x, y, z to the complex number a, b
          * 				I think.
          */
@@ -45,6 +45,13 @@ public class Robot {
         bucket = new ArrayList<>();
     }
 
+    public void onBucketSighting(double distance) {
+        double[] predLocation = new double[] {
+            position[0] + distance * orientation[0],
+                position[1] + distance * orientation[1]
+        };
+        addBucket(predLocation);
+    }
     public void addBucket(double[] location) {
         bucket.add(new Bucket(location));
         Log.d(TAG, "Bucket sighting: (" + location[0] + ", " + location[1] + ")");
@@ -54,7 +61,7 @@ public class Robot {
      * returns the index in ArrayList of the nearest bucket we've sighted.
      * returns -1 if no buckets have been sighted.
      */
-    public Bucket nearestBucket() {
+    public int nearestBucketIndex() {
         double smallestDistance = (double) Integer.MAX_VALUE;
         int index = -1;
         double distance;
@@ -65,14 +72,14 @@ public class Robot {
                 index = i;
             }
          }
-        return bucket.get(index);
+        return index;
     }
 
     public void update() {
-        Log.d(TAG,"Update: buckets sighted: " + bucket.size());
+        Log.d(TAG,"onUpdate");
         //if we've seen any buckets, go to the closest one
         if(bucket.size() > 0)
-            gotoLocation(nearestBucket().location());
+            gotoBucketLocation(nearestBucketIndex());
         //otherwise, wander around until we have.
         else {
 //            setSpeed(300);
@@ -83,11 +90,12 @@ public class Robot {
         /*
          * this is the basic "go to this place" algorithm
          * from the pathfinder, get the next (most time-efficient) target location
-         * pass that target location to gotoLocation(), and the robot should make it there.
+         * pass that target location to gotoBucketLocation(), and the robot should make it there.
          * after you've scanned, pass the next pathfinder target location, wrinse, and repeat.
          */
 
-    public void gotoLocation(double[] target) {
+    public void gotoBucketLocation(int bucketIndex) {
+        double[] target = bucket.get(bucketIndex).location();
         Log.d(TAG,"Going to location: (" + target[0] + ", " + target[1] + ")");
         double angleTolerance = 5;
         //target[0] = x
@@ -98,13 +106,26 @@ public class Robot {
 
         faceLocation(targetOrientation, angleTolerance);
 
-        if(distance(target) > 0.5) {
+        if(distance(target) > 0.2) {
             targetOrientation = deltaVector(target);
             targetOrientation[0] /= distance(target);
             targetOrientation[1] /= distance(target);
             setSpeed(300);
             setSteering((int) Math.round((Math.atan2(targetOrientation[1], targetOrientation[0])
                                 - Math.atan2(orientation[1], orientation[0]))));
+        }
+        else {
+            setSpeed(0);
+            setSteering(0);
+            mMainActivity.addRajBucket();
+            mMainActivity.safeSleep(2000);
+
+            //turn the robot around
+            targetOrientation = new double[] {
+                    -orientation[0],
+                    -orientation[1]
+            };
+            faceLocation(targetOrientation, 10);
         }
     }
 
