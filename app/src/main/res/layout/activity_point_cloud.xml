@@ -90,18 +90,26 @@
 
     <TextView
         android:layout_width="match_parent"
-        android:layout_height="125px"
+        android:layout_height="105px"
         android:id="@+id/average_z_textview"
         android:textColor="@color/primary"
         android:layout_below="@id/autonMode"
         />
     <TextView
         android:layout_width="match_parent"
-        android:layout_height="125px"
+        android:layout_height="105px"
         android:id="@+id/likePointsTxt"
         android:textColor="@color/primary"
         android:text="NA"
         android:layout_below="@id/average_z_textview"
+        />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="105px"
+        android:id="@+id/translationData"
+        android:textColor="@color/gold"
+        android:text="NA Translation"
+        android:layout_below="@id/likePointsTxt"
         />
 
 

@@ -11,5 +11,7 @@
     <color name="debug_bg">#66000000</color>
     <color name="green">#ee047c0c</color>
     <color name="red">#dce70505</color>
+    <color name="gold">#dce7ba05</color>
+
 
 </resources>

@@ -115,6 +115,8 @@ public class MainActivity extends IOIOActivity{
 
     public static final int BUTTON_B = 97, BUTTON_A = 96;
 
+    private static final String sTranslationFormat = "Translation: %S, %S, %S";
+
     private static final String UX_EXCEPTION_EVENT_DETECTED = "Exception Detected: ";
     private static final String UX_EXCEPTION_EVENT_RESOLVED = "Exception Resolved: ";
 
@@ -154,6 +156,8 @@ public class MainActivity extends IOIOActivity{
     private int primaryTextColor;
 
     private TextToSpeech textToSpeech;
+
+    private TextView translationText;
 
 
     private TangoTextureCameraPreview tangoCameraPreview;
@@ -199,6 +203,7 @@ public class MainActivity extends IOIOActivity{
 
     ArrayList<String> scanInfo = new ArrayList<String>();
 
+    private String translationTextInfo;
 
 
     public void constrainMotorValues() {
@@ -209,6 +214,9 @@ public class MainActivity extends IOIOActivity{
         else if(pwm_steering < MIN_PWM) pwm_steering = MIN_PWM;
     }
 
+    public TangoPoseData getPose() {
+        return mapPos;
+    }
 
     class Looper extends BaseIOIOLooper {
 
@@ -333,6 +341,8 @@ public class MainActivity extends IOIOActivity{
 
         likePoints = (TextView)findViewById(R.id.likePointsTxt);
         mSurfaceView = (RajawaliSurfaceView) findViewById(R.id.gl_surface_view);
+
+        translationText = (TextView)findViewById(R.id.translationData);
 
         textToSpeech = new TextToSpeech(MainActivity.this, new TextToSpeech.OnInitListener() {
             @Override
@@ -626,6 +636,12 @@ public class MainActivity extends IOIOActivity{
 
                 mapPos = pose;
 
+                final String translationMsg = String.format(sTranslationFormat,
+                        FORMAT_THREE_DECIMAL.format(pose.translation[0]),
+                        FORMAT_THREE_DECIMAL.format(pose.translation[1]),
+                        FORMAT_THREE_DECIMAL.format(pose.translation[2]));
+                translationTextInfo = translationMsg;
+
 
                 /*
                 TANGO POSE UPDATE FOR MAP HERE
@@ -651,7 +667,7 @@ public class MainActivity extends IOIOActivity{
 
                 mPointCloudTimeToNextUpdate -= pointCloudFrameDelta;
 
-                calculateAveragedDepth(pointCloud.points, pointCloud.numPoints);
+                float distance = calculateAveragedDepth(pointCloud.points, pointCloud.numPoints);
                 if(pointCloud != null) {
                     pointCloud.points.get(pcarray);
                 }
@@ -684,8 +700,8 @@ public class MainActivity extends IOIOActivity{
                     avgY /= num;
 //                    avgZ /= avg;
 //                }
-                if(avgY < 1.0) {
-                    mRobot.onBucketSighting(avgY);
+                if(distance < 1) {
+                    mRobot.onBucketSighting(distance, currentTimeStamp);
                 }
 
                 if (mPointCloudTimeToNextUpdate < 0.0) {
@@ -697,6 +713,10 @@ public class MainActivity extends IOIOActivity{
                         public void run() {
                             //mPointCountTextView.setText(pointCountString);
                             mAverageZTextView.setText(FORMAT_THREE_DECIMAL.format(averageDepth));
+                            if(mapPos != null) {
+                                translationText.setText(translationTextInfo);
+;
+                            }
                             if(iLikePoints) {
                                 Log.d("PointInfo", "I like points");
                                 likePoints.setTextColor(Color.GREEN);

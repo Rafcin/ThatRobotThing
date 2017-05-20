@@ -40,10 +40,13 @@ public class Robot extends Tango.TangoUpdateCallback {
     private MainActivity mMainActivity;
 
     public final String TAG = "ROBOT";
+    public final double GRID_WIDTH = 1.0;
 
     private int current_target_index;
 
     private AutoAI autoAI;
+
+    private double prev_timeStamp;
 
         /*
          * position is a 2D vector {x, y}
@@ -63,6 +66,7 @@ public class Robot extends Tango.TangoUpdateCallback {
         speed = mMainActivity.DEFAULT_PWM;
         steering = mMainActivity.DEFAULT_PWM;
         buckets = new ArrayList<>();
+        prev_timeStamp = 0;
     }
 
     public void runAutonomous() {
@@ -74,13 +78,16 @@ public class Robot extends Tango.TangoUpdateCallback {
         autoAI.execute();
     }
 
-    public void onBucketSighting(double distance) {
-        mMainActivity.textToSpeech("Bucket Sighted");
-//        double[] predLocation = new double[] {
-//            position[0] + distance * orientation[0],
-//                position[1] + distance * orientation[1]
-//        };
-//        addBucket(predLocation);
+    public void onBucketSighting(double distance, double timeStamp) {
+        double[] predLocation = new double[] {
+            position[0] + distance * orientation[0],
+                position[1] + distance * orientation[1]
+        };
+        if(timeStamp - prev_timeStamp > 1.0) {
+            mMainActivity.textToSpeech("Potential Victim Identified");
+            addBucket(predLocation);
+        }
+        prev_timeStamp = timeStamp;
 
     }
     public void addBucket(double[] location) {
@@ -237,14 +244,27 @@ public class Robot extends Tango.TangoUpdateCallback {
     }
 
     protected class AutoAI extends AsyncTask<Void, Void, Void> {
-
-
         @Override
         protected Void doInBackground(Void... voids) {
+            mMainActivity.textToSpeech("I'm sorry, Dave. I'm afraid I can't do that.");
+
             while(mMainActivity.isAuto()) {
-                update();
+                snake();
             }
+
+
+
+
             return null;
+        }
+    }
+
+    public void snake() {
+        setSpeed(75);
+        if(mMainActivity.getPose().translation[1] > GRID_WIDTH) {
+            setSteering(50);
+        } else if(mMainActivity.getPose().translation[1] < -GRID_WIDTH) {
+            setSteering(-50);
         }
     }
 
