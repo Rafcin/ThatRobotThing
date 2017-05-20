@@ -111,6 +111,14 @@
         android:text="NA Translation"
         android:layout_below="@id/likePointsTxt"
         />
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="105px"
+        android:id="@+id/orientationData"
+        android:textColor="@color/gold"
+        android:text="NA Translation"
+        android:layout_below="@id/translationData"
+        />
 
 
 </RelativeLayout>

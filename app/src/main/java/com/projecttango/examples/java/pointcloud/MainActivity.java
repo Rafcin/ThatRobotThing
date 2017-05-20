@@ -84,6 +84,7 @@ import com.projecttango.tangosupport.ux.UxExceptionEventListener;
 
 import org.opencv.core.Mat;
 import org.opencv.core.Scalar;
+import org.rajawali3d.math.vector.Vector3;
 import org.rajawali3d.scene.ASceneFrameCallback;
 import org.rajawali3d.surface.RajawaliSurfaceView;
 
@@ -110,12 +111,31 @@ import ioio.lib.util.android.IOIOActivity;
  * service and propagation of Tango point cloud data to OpenGL and Layout views. OpenGL rendering
  * logic is delegated to the {@link Scene} class.
  */
+
+
+ /*
+ @TODO 1. Finish Snake 2. Add bucket to render based of the location of the bucket from pointcloud.
+ @TODO 3. For adding bucket, make sure the pos is a 3d pose and get pose[0],height of cube,pose[2]
+
+
+
+
+
+
+
+ */
+
+
+
+
 public class MainActivity extends IOIOActivity{
     private static final String TAG = MainActivity.class.getSimpleName();
 
     public static final int BUTTON_B = 97, BUTTON_A = 96;
 
     private static final String sTranslationFormat = "Translation: %S, %S, %S";
+    private static final String sOrientationFormat = "Orientation: %S, %S, %S, %S, %S";
+
 
     private static final String UX_EXCEPTION_EVENT_DETECTED = "Exception Detected: ";
     private static final String UX_EXCEPTION_EVENT_RESOLVED = "Exception Resolved: ";
@@ -158,6 +178,7 @@ public class MainActivity extends IOIOActivity{
     private TextToSpeech textToSpeech;
 
     private TextView translationText;
+    private TextView orientationText;
 
 
     private TangoTextureCameraPreview tangoCameraPreview;
@@ -204,6 +225,7 @@ public class MainActivity extends IOIOActivity{
     ArrayList<String> scanInfo = new ArrayList<String>();
 
     private String translationTextInfo;
+    private String orientationTextInfo;
 
 
     public void constrainMotorValues() {
@@ -343,6 +365,7 @@ public class MainActivity extends IOIOActivity{
         mSurfaceView = (RajawaliSurfaceView) findViewById(R.id.gl_surface_view);
 
         translationText = (TextView)findViewById(R.id.translationData);
+        orientationText = (TextView)findViewById(R.id.orientationData);
 
         textToSpeech = new TextToSpeech(MainActivity.this, new TextToSpeech.OnInitListener() {
             @Override
@@ -615,6 +638,13 @@ public class MainActivity extends IOIOActivity{
         return config;
     }
 
+    public double rotationAngle() {
+        return Math.atan2(
+                2.0 * (getPose().rotation[0] * getPose().rotation[1] + getPose().rotation[2] * getPose().rotation[3]),
+                Math.pow(getPose().rotation[3], 2) + Math.pow(getPose().rotation[0], 2) -
+                        Math.pow(getPose().rotation[1], 2) - Math.pow(getPose().rotation[2], 2));
+    }
+
     /**
      * Set up the callback listeners for the Tango Service and obtain other parameters required
      * after Tango connection.
@@ -642,6 +672,17 @@ public class MainActivity extends IOIOActivity{
                         FORMAT_THREE_DECIMAL.format(pose.translation[2]));
                 translationTextInfo = translationMsg;
 
+                double mag = Math.sqrt(pose.rotation[3]*pose.rotation[3]
+                + pose.rotation[2]*pose.rotation[2]);
+                final String orientationMsg = String.format(sOrientationFormat,
+                        FORMAT_THREE_DECIMAL.format(pose.rotation[0]),
+                        FORMAT_THREE_DECIMAL.format(pose.rotation[1]),
+                        FORMAT_THREE_DECIMAL.format(pose.rotation[2]),
+                        FORMAT_THREE_DECIMAL.format(pose.rotation[3]),
+                        FORMAT_THREE_DECIMAL.format(
+                                rotationAngle())
+                        );
+                orientationTextInfo = orientationMsg;
 
                 /*
                 TANGO POSE UPDATE FOR MAP HERE
@@ -689,7 +730,7 @@ public class MainActivity extends IOIOActivity{
                         num++;
                         //DO NOT ADD LOGS IN THE FOR LOOP IT WILL CRASH
                     }
-                    if (Math.abs(pcarray[i ]) < 0.5f && Math.abs(pcarray[i + 1]) < 3 && pcarray[i + 2] < 0.5f){
+                    if (Math.abs(pcarray[i ]) < 0.5f && Math.abs(pcarray[i + 1]) < 0.1 && pcarray[i + 2] < 0.5f){
                         //that will detect if any points are closer than half a meter, and within a 50cm cube pointing out from infront of the depth camera
                         //so checking absolute X is less than 0.05, will be true if a point is less than 50cm to the left or right of the depth camera
                     }
@@ -715,6 +756,7 @@ public class MainActivity extends IOIOActivity{
                             mAverageZTextView.setText(FORMAT_THREE_DECIMAL.format(averageDepth));
                             if(mapPos != null) {
                                 translationText.setText(translationTextInfo);
+                                orientationText.setText(orientationTextInfo);
 ;
                             }
                             if(iLikePoints) {
@@ -742,7 +784,7 @@ public class MainActivity extends IOIOActivity{
                     bm[0] = tangoCameraPreview.getBitmap();
                     frameCount++;
                     Log.d("FPSTango",": "+frameCount);
-                    if(frameCount == 8) {
+                    if(frameCount == 6) {
                         frameCount=0;
                         scan(tangoCameraPreview.getBitmap());
 
@@ -1221,7 +1263,6 @@ public class MainActivity extends IOIOActivity{
 
     //Scan for QR code and save information to phone
     public String scan(Bitmap bMap) {
-
         int[] intArray = new int[bMap.getWidth()*bMap.getHeight()];
         //copy pixel data from the Bitmap into the 'intArray' array
         bMap.getPixels(intArray, 0, bMap.getWidth(), 0, 0, bMap.getWidth(), bMap.getHeight());
@@ -1237,7 +1278,7 @@ public class MainActivity extends IOIOActivity{
             Result result = reader.decode(bitmap);
             text = result.getText();
             scanInfo.add(text);
-
+            addRajBucket();
             //Toasts the Info
             toast(text+" "+result);
             textToSpeech.speak(text,TextToSpeech.QUEUE_FLUSH,null);
@@ -1292,6 +1333,10 @@ public class MainActivity extends IOIOActivity{
         mRenderer.setTrueMarker();
     }
 
+    public void saveBucketLocations(Vector3[] locations) {
+        mRenderer.saveBucketLocations(locations);
+    }
+
     //IOIO Funcs
     public synchronized void set_speed(int speed)
     {
@@ -1333,13 +1378,15 @@ public class MainActivity extends IOIOActivity{
     private float calculateAveragedDepth(FloatBuffer pointCloudBuffer, int numPoints) {
         float totalZ = 0;
         float averageZ = 0;
-        pcarray = new float[pointCloudBuffer.capacity()];
-        if (numPoints != 0) {
-            int numFloats = 4 * numPoints;
-            for (int i = 2; i < numFloats; i = i + 4) {
-                totalZ = totalZ + pointCloudBuffer.get(i);
+        if(pointCloudBuffer != null) {
+            pcarray = new float[pointCloudBuffer.capacity()];
+            if (numPoints != 0) {
+                int numFloats = 4 * numPoints;
+                for (int i = 2; i < numFloats; i = i + 4) {
+                    totalZ = totalZ + pointCloudBuffer.get(i);
+                }
+                averageZ = totalZ / numPoints;
             }
-            averageZ = totalZ / numPoints;
         }
         return averageZ;
     }

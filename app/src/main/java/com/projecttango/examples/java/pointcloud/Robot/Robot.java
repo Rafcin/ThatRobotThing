@@ -7,6 +7,8 @@ import com.google.atap.tangoservice.Tango;
 import com.google.atap.tangoservice.TangoPoseData;
 import com.projecttango.examples.java.pointcloud.MainActivity;
 
+import org.rajawali3d.math.vector.Vector3;
+
 import java.util.ArrayList;
 
 /**
@@ -14,6 +16,7 @@ import java.util.ArrayList;
  */
 
 public class Robot extends Tango.TangoUpdateCallback {
+    private boolean mPause = false;
     /*
     * Problem:
     * we have position data and a list of locations to accomplish
@@ -40,7 +43,7 @@ public class Robot extends Tango.TangoUpdateCallback {
     private MainActivity mMainActivity;
 
     public final String TAG = "ROBOT";
-    public final double GRID_WIDTH = 1.0;
+    public final double GRID_WIDTH = 25.0;
 
     private int current_target_index;
 
@@ -78,6 +81,18 @@ public class Robot extends Tango.TangoUpdateCallback {
         autoAI.execute();
     }
 
+    public Vector3[] getBucketLocations() {
+        Vector3[] bucket_locs = new Vector3[buckets.size()];
+
+        for(int i = 0; i < buckets.size(); i++) {
+            bucket_locs[i] = new Vector3(
+                    buckets.get(i).location[0],
+                    buckets.get(i).location[1],
+                    mMainActivity.getPose().translation[2]);
+        }
+        return bucket_locs;
+    }
+
     public void onBucketSighting(double distance, double timeStamp) {
         double[] predLocation = new double[] {
             position[0] + distance * orientation[0],
@@ -85,13 +100,23 @@ public class Robot extends Tango.TangoUpdateCallback {
         };
         if(timeStamp - prev_timeStamp > 1.0) {
             mMainActivity.textToSpeech("Potential Victim Identified");
-            addBucket(predLocation);
+            mPause=true;
+
+            if (mMainActivity.getPose() != null) {
+                //addBucket(mMainActivity.getPose().translation);
+            }
+
         }
         prev_timeStamp = timeStamp;
+
+
 
     }
     public void addBucket(double[] location) {
         buckets.add(new Bucket(location));
+        if(location != null) {
+            //mMainActivity.addRajBucket();
+        }
         Log.d(TAG, "Bucket sighting: (" + location[0] + ", " + location[1] + ")");
     }
 
@@ -162,7 +187,7 @@ public class Robot extends Tango.TangoUpdateCallback {
             setSpeed(0);
             setSteering(0);
             //mMainActivity.safeSleep(2000);
-            mMainActivity.addRajBucket();
+            //mMainActivity.addRajBucket();
             //turn the robot around
             targetOrientation = new double[] {
                     -orientation[0],
@@ -248,24 +273,74 @@ public class Robot extends Tango.TangoUpdateCallback {
         protected Void doInBackground(Void... voids) {
             mMainActivity.textToSpeech("I'm sorry, Dave. I'm afraid I can't do that.");
 
+            setSpeed(100);
             while(mMainActivity.isAuto()) {
-                snake();
+
+                if (mPause){
+                    setSpeed(0);
+                    safeSleep(2000);
+                    setSteering(100);
+                    safeSleep(500);
+                    setSteering(0);
+                    setSpeed(100);
+                    mPause=false;
+                }
+
+                if(mMainActivity.getPose().translation[1] > GRID_WIDTH) {
+                    setSteering(50);
+                    safeSleep(500);
+                    setSteering(0);
+                } if(mMainActivity.getPose().translation[1] < -GRID_WIDTH) {
+                    setSteering(50);
+                    safeSleep(500);
+                    setSteering(0);
+                }if(mMainActivity.getPose().translation[0] > GRID_WIDTH) {
+                    setSteering(50);
+                    safeSleep(500);
+                    setSteering(0);
+                } if(mMainActivity.getPose().translation[0] < -GRID_WIDTH) {
+                    setSteering(50);
+                    safeSleep(500);
+                    setSteering(0);
+                }
+
+
             }
 
+            setSpeed(0);
 
-
+            mMainActivity.saveBucketLocations(getBucketLocations());
+            //mMainActivity.addRajBucket();
 
             return null;
         }
     }
 
-    public void snake() {
-        setSpeed(75);
-        if(mMainActivity.getPose().translation[1] > GRID_WIDTH) {
-            setSteering(50);
-        } else if(mMainActivity.getPose().translation[1] < -GRID_WIDTH) {
-            setSteering(-50);
+    public void turn(double angle, int direction) {
+        double targetAngle = mMainActivity.rotationAngle() + angle;
+        if(targetAngle > Math.PI)
+            targetAngle -= Math.PI;
+        else if(targetAngle < -Math.PI) {
+            targetAngle += Math.PI;
         }
+        if(Math.abs(mMainActivity.rotationAngle() - targetAngle) > 0.1) {
+            steering = direction*60;
+        }
+//        setSteering(0);
+    }
+
+    public void snake() {
+        setSpeed(100);
+        steering = 0;
+        if(mMainActivity.getPose().translation[1] > GRID_WIDTH) {
+            turn(Math.PI, 1);
+// (Math.PI, 1);
+        } else if(mMainActivity.getPose().translation[1] < -GRID_WIDTH) {
+            turn(Math.PI, -1);
+            //    turn(Math.PI, -1);
+        }
+        setSteering(steering);
+
     }
 
     private void safeSleep(int i) {

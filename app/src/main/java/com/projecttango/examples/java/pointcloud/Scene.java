@@ -58,6 +58,8 @@ public class Scene extends RajawaliRenderer {
     public boolean qrMarker;
 
 
+    private Vector3[] bucketLocations;
+
     public static final int QUAD_TREE_START = -60;
     //Size of grid when you walk
     //@TODO figure out what unit
@@ -106,6 +108,8 @@ public class Scene extends RajawaliRenderer {
     Line3D line = new Line3D(points, 5, 0x00ff00);
     Material lineMat = new Material();
 
+    private double[] bucket2DLoc;
+
 
 
 
@@ -118,6 +122,11 @@ public class Scene extends RajawaliRenderer {
         data = new QuadTree(new Vector2(QUAD_TREE_START, QUAD_TREE_START), QUAD_TREE_RANGE, 8);
 
     }
+
+    public void saveBucketLocations(Vector3[] locations) {
+        bucketLocations = locations;
+    }
+
 
 
     @Override
@@ -278,21 +287,24 @@ public class Scene extends RajawaliRenderer {
         }
     }
 
-    public void addQrMarker(){
-        if(qrMarker == true){
-            Log.d("QRMarker","Is True");
-            addQRBucketObject();
-            // Set the pos of the cube at the last pos the Furstrum was at.
-            qrMarker = false;
-        }else{
-            Log.d("QRMarker","Still False");
+    public void addQrMarker() {
+        if (qrMarker == true) {
+            Log.d("QRMarker", "Is True");
+            if (publicTranslation != null) {
+                addQRBucketObject();
+                //addBucketsRaj();
+                // Set the pos of the cube at the last pos the Furstrum was at.
+                qrMarker = false;
+            } else {
+                Log.d("QRMarker", "Still False");
+            }
         }
     }
 
     public void addQRBucketObject(){
         Plane bucketQR = new Plane(0.7f,0.7f,1,1,1);
         bucketQR.setMaterial(orange);
-        bucketQR.setPosition(new Vector3(publicTranslation[0],-1.39,publicTranslation[2]));
+        bucketQR.setPosition(new Vector3(publicTranslation[0], -1.39, publicTranslation[2]));
         bucketQR.setRotY(90);
         bucketQR.setRotZ(90);
         qrBucketObjPos = bucketQR.getPosition();
@@ -301,6 +313,19 @@ public class Scene extends RajawaliRenderer {
 
 
     }
+
+//    public void addBucketsRaj(){
+//        for(int i = 0; i < bucketLocations.length; i++) {
+//            Plane bucketQR = new Plane(0.7f, 0.7f, 1, 1, 1);
+//            bucketQR.setMaterial(orange);
+//            bucketQR.setPosition(bucketLocations[i]);
+//            bucketQR.setRotY(90);
+//            bucketQR.setRotZ(90);
+//            qrBucketObjPos = bucketQR.getPosition();
+//            points.add(qrBucketObjPos);
+//            getCurrentScene().addChild(bucketQR);
+//        }
+//    }
 
     public void drawLineBtwnBuckets(){
         lineMat.setColor(Color.RED);
