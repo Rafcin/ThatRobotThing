@@ -197,6 +197,9 @@ public class MainActivity extends IOIOActivity{
     private TextView likePoints;
     boolean iLikePoints = false;
 
+    ArrayList<String> scanInfo = new ArrayList<String>();
+
+
 
     public void constrainMotorValues() {
         if(pwm_speed > MAX_PWM) pwm_speed = MAX_PWM;
@@ -250,13 +253,11 @@ public class MainActivity extends IOIOActivity{
         @Override
         public void loop() throws ConnectionLostException, InterruptedException {
 
-            mRobot.updatePose(mapPos.translation, new double[] {
-                    mapPos.rotation[1],
-                    mapPos.rotation[2]});
 
-            if(isAuto) {
-                mRobot.update();
-            }
+
+//            if(isAuto) {
+//                mRobot.update();
+//            }
 
             constrainMotorValues();
 
@@ -658,7 +659,7 @@ public class MainActivity extends IOIOActivity{
                 float avgX = 0.0f;
                 float avgY = 0.0f;
                 float avgZ = 0.0f;
-                float avg = 0.0f;
+                float num = 0.0f;
                 // i=x i+1=y i+2=z i+3 == C(confidence) i+4=nextX
                 for(int i = 0; i < pcarray.length; i+= 4) {
                     //check that the points are both above the floor and close enough
@@ -669,21 +670,23 @@ public class MainActivity extends IOIOActivity{
                         avgX += pcarray[i ];
                         avgY += pcarray[i+1 ];
                         avgZ += pcarray[i+2 ];
-                        avg += 1.0f;
+                        num++;
                         //DO NOT ADD LOGS IN THE FOR LOOP IT WILL CRASH
                     }
                     if (Math.abs(pcarray[i ]) < 0.5f && Math.abs(pcarray[i + 1]) < 3 && pcarray[i + 2] < 0.5f){
                         //that will detect if any points are closer than half a meter, and within a 50cm cube pointing out from infront of the depth camera
                         //so checking absolute X is less than 0.05, will be true if a point is less than 50cm to the left or right of the depth camera
-                        mRobot.onBucketSighting(pcarray[i+1]);
                     }
                 }
                 //gets an average of all the points that the if statement returns as true
 //                if(avg > 0.0f){
 //                    avgX /= avg;
-//                    avgY /= avg;
+                    avgY /= num;
 //                    avgZ /= avg;
 //                }
+                if(avgY < 1.0) {
+                    mRobot.onBucketSighting(avgY);
+                }
 
                 if (mPointCloudTimeToNextUpdate < 0.0) {
                     mPointCloudTimeToNextUpdate = UPDATE_INTERVAL_MS;
@@ -719,9 +722,9 @@ public class MainActivity extends IOIOActivity{
                     bm[0] = tangoCameraPreview.getBitmap();
                     frameCount++;
                     Log.d("FPSTango",": "+frameCount);
-                    if(frameCount == 15) {
+                    if(frameCount == 8) {
                         frameCount=0;
-                        //scan(tangoCameraPreview.getBitmap());
+                        scan(tangoCameraPreview.getBitmap());
 
                     }
                 }
@@ -981,7 +984,11 @@ public class MainActivity extends IOIOActivity{
         }
         if(keyCode == BUTTON_B) {
             isAuto = !isAuto;
-            Log.d(TAG, "AutoAT:"+isAuto);
+            if(isAuto) {
+                textToSpeech.speak("AI On",TextToSpeech.QUEUE_FLUSH,null);
+                mRobot.runAutonomous();
+            }
+            Log.d(TAG, "AutoAI:"+isAuto);
 
         }
         if(keyCode == BUTTON_A) {
@@ -996,6 +1003,13 @@ public class MainActivity extends IOIOActivity{
         return handled;
     }
 
+    public boolean isAuto() {
+        return isAuto;
+    }
+
+    public void textToSpeech(String msg) {
+        textToSpeech.speak(msg,TextToSpeech.QUEUE_FLUSH,null);
+    }
 
     @Override
     public boolean onGenericMotionEvent(MotionEvent event) {
@@ -1187,6 +1201,7 @@ public class MainActivity extends IOIOActivity{
 
     //Scan for QR code and save information to phone
     public String scan(Bitmap bMap) {
+
         int[] intArray = new int[bMap.getWidth()*bMap.getHeight()];
         //copy pixel data from the Bitmap into the 'intArray' array
         bMap.getPixels(intArray, 0, bMap.getWidth(), 0, 0, bMap.getWidth(), bMap.getHeight());
@@ -1201,6 +1216,7 @@ public class MainActivity extends IOIOActivity{
         try {
             Result result = reader.decode(bitmap);
             text = result.getText();
+            scanInfo.add(text);
 
             //Toasts the Info
             toast(text+" "+result);
@@ -1217,7 +1233,7 @@ public class MainActivity extends IOIOActivity{
                     newFolder.mkdir();
                 }
                 try {
-                    File file = new File(newFolder, time + ".txt");
+                    File file = new File(newFolder, text + ".txt");
                     file.createNewFile();
                     FileOutputStream fos=new FileOutputStream(file);
                     try {

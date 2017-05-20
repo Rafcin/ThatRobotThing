@@ -1,7 +1,10 @@
 package com.projecttango.examples.java.pointcloud.Robot;
 
+import android.os.AsyncTask;
 import android.util.Log;
 
+import com.google.atap.tangoservice.Tango;
+import com.google.atap.tangoservice.TangoPoseData;
 import com.projecttango.examples.java.pointcloud.MainActivity;
 
 import java.util.ArrayList;
@@ -10,7 +13,7 @@ import java.util.ArrayList;
  * Created by rafaelszuminski on 5/3/17.
  */
 
-public class Robot {
+public class Robot extends Tango.TangoUpdateCallback {
     /*
     * Problem:
     * we have position data and a list of locations to accomplish
@@ -18,15 +21,29 @@ public class Robot {
     * we need to translate this algorithm to motor data
     */
 
+    @Override
+    public void onPoseAvailable(TangoPoseData pose) {
+        super.onPoseAvailable(pose);
+        position = pose.translation;
+        orientation = new double[] {
+                pose.rotation[1],
+                pose.rotation[2]
+        };
+    }
+
     private double[] position;
     private double[] orientation;
+    private int speed, steering;
+
     private ArrayList<Bucket> buckets;
-    private int speed,turning;
+
     private MainActivity mMainActivity;
+
     public final String TAG = "ROBOT";
 
-    private int wandering_timer;
     private int current_target_index;
+
+    private AutoAI autoAI;
 
         /*
          * position is a 2D vector {x, y}
@@ -44,17 +61,27 @@ public class Robot {
         position = new double[] {0, 0};
         orientation = new double[] {0, 0};
         speed = mMainActivity.DEFAULT_PWM;
-        turning = mMainActivity.DEFAULT_PWM;
+        steering = mMainActivity.DEFAULT_PWM;
         buckets = new ArrayList<>();
-        wandering_timer = 0;
+    }
+
+    public void runAutonomous() {
+        if(autoAI != null) {
+            autoAI.cancel(true);
+            autoAI = null;
+        }
+        autoAI = new AutoAI();
+        autoAI.execute();
     }
 
     public void onBucketSighting(double distance) {
-        double[] predLocation = new double[] {
-            position[0] + distance * orientation[0],
-                position[1] + distance * orientation[1]
-        };
-        addBucket(predLocation);
+        mMainActivity.textToSpeech("Bucket Sighted");
+//        double[] predLocation = new double[] {
+//            position[0] + distance * orientation[0],
+//                position[1] + distance * orientation[1]
+//        };
+//        addBucket(predLocation);
+
     }
     public void addBucket(double[] location) {
         buckets.add(new Bucket(location));
@@ -79,22 +106,20 @@ public class Robot {
         return index;
     }
 
-    public void updatePose(double[] vector, double[] complex) {
-        orientation = complex;
-        position = vector;
-    }
 
     public void update() {
         Log.d(TAG,"onUpdate");
 
         //if we've seen any buckets, go to the closest one
         current_target_index = nearestUnscannedBucketIndex();
-        if(buckets.size() > 0 && current_target_index != -1)
+        if(current_target_index != -1 || buckets.size() > 0) {
             gotoBucketLocation(current_target_index);
+        }
         //otherwise, wander around until we have.
-        else if(buckets.size()==0){
+        else {
+
             setSteering(75);
-            setSpeed(wandering_timer++);
+            //setSpeed(wandering_timer++);
             mMainActivity.constrainMotorValues();
         }
     }
@@ -122,14 +147,14 @@ public class Robot {
             targetOrientation = deltaVector(target);
             targetOrientation[0] /= distance(target);
             targetOrientation[1] /= distance(target);
-            setSpeed(300);
-            setSteering((int) Math.round((Math.atan2(targetOrientation[1], targetOrientation[0])
-                                - Math.atan2(orientation[1], orientation[0]))));
+            setSpeed(200);
+//            setSteering((int) Math.round((Math.atan2(targetOrientation[1], targetOrientation[0])
+//                                - Math.atan2(orientation[1], orientation[0]))));
         }
         else {
             setSpeed(0);
             setSteering(0);
-            mMainActivity.safeSleep(2000);
+            //mMainActivity.safeSleep(2000);
             mMainActivity.addRajBucket();
             //turn the robot around
             targetOrientation = new double[] {
@@ -167,12 +192,12 @@ public class Robot {
         mMainActivity.set_speed(mMainActivity.DEFAULT_PWM + speed);
     }
     public int getSteering() {
-        return turning;
+        return steering;
     }
     public void setSteering(int s) {
         Log.d(TAG, "Set Steer: " + s);
-        turning = s;
-        mMainActivity.set_speed(mMainActivity.DEFAULT_PWM + turning);
+        steering = s;
+        mMainActivity.set_steering(mMainActivity.DEFAULT_PWM + steering);
     }
 
 
@@ -191,5 +216,43 @@ public class Robot {
     public double distance(Double[] target) {
         double[] t = new double[] {target[0], target[1]};
         return distance(t);
+    }
+
+    class Bucket {
+        private double[] location;
+        private boolean scanned;
+        public Bucket(double[] loc) {
+            location = loc;
+            scanned = false;
+        }
+        public double[] location() {
+            return location;
+        }
+        public void scan() {
+            scanned = true;
+        }
+        public boolean isScanned() {
+            return scanned;
+        }
+    }
+
+    protected class AutoAI extends AsyncTask<Void, Void, Void> {
+
+
+        @Override
+        protected Void doInBackground(Void... voids) {
+            while(mMainActivity.isAuto()) {
+                update();
+            }
+            return null;
+        }
+    }
+
+    private void safeSleep(int i) {
+        try {
+            Thread.sleep(i);
+        } catch(InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 }

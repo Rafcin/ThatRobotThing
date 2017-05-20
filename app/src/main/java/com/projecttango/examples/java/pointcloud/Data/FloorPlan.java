@@ -14,7 +14,7 @@ import java.util.List;
 
 public class FloorPlan extends Object3D {
 
-    private static final int MAX_VERTICES = 10000;
+    private static final int MAX_VERTICES = 50000;
     private final float[] color;
     private QuadTree data;
 
