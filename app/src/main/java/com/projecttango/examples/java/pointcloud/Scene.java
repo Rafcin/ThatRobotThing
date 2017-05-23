@@ -125,6 +125,7 @@ public class Scene extends RajawaliRenderer {
 
     public void saveBucketLocations(Vector3[] locations) {
         bucketLocations = locations;
+
     }
 
 

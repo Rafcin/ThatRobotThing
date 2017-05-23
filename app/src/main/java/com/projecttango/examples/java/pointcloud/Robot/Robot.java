@@ -103,7 +103,7 @@ public class Robot extends Tango.TangoUpdateCallback {
             mPause=true;
 
             if (mMainActivity.getPose() != null) {
-                //addBucket(mMainActivity.getPose().translation);
+                addBucket(mMainActivity.getPose().translation);
             }
 
         }
@@ -273,12 +273,12 @@ public class Robot extends Tango.TangoUpdateCallback {
         protected Void doInBackground(Void... voids) {
             mMainActivity.textToSpeech("I'm sorry, Dave. I'm afraid I can't do that.");
 
-            setSpeed(100);
+            setSpeed(150);
             while(mMainActivity.isAuto()) {
 
                 if (mPause){
                     setSpeed(0);
-                    safeSleep(2000);
+                    safeSleep(3000);
                     setSteering(100);
                     safeSleep(500);
                     setSteering(0);

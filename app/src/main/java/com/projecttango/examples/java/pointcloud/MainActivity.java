@@ -240,6 +240,8 @@ public class MainActivity extends IOIOActivity{
         return mapPos;
     }
 
+
+
     class Looper extends BaseIOIOLooper {
 
         /** The on-board LED. */
@@ -1294,7 +1296,9 @@ public class MainActivity extends IOIOActivity{
                     newFolder.mkdir();
                 }
                 try {
-                    File file = new File(newFolder, text + ".txt");
+                    File file = new File(newFolder, text +
+                            "(" + mapPos.translation[0] + ", " +
+                            mapPos.translation[1] + ")" + ".txt");
                     file.createNewFile();
                     FileOutputStream fos=new FileOutputStream(file);
                     try {
@@ -1329,13 +1333,39 @@ public class MainActivity extends IOIOActivity{
         return text;
     }
 
+
     public void addRajBucket(){
         mRenderer.setTrueMarker();
     }
 
     public void saveBucketLocations(Vector3[] locations) {
-        mRenderer.saveBucketLocations(locations);
+        //mRenderer.saveBucketLocations(locations);
+
+        File newFolder = new File(Environment.getExternalStorageDirectory(), "RescueRoboticsL");
+        if (!newFolder.exists()) {
+            newFolder.mkdir();
+        }
+
+        try {
+            File file = new File(newFolder, "poseInfo.txt");
+            file.createNewFile();
+            FileOutputStream fos=new FileOutputStream(file);
+            try {
+                for (Vector3 v : locations) {
+                    String val = "" + v.x + ", " + v.y + "\n";
+                    fos.write(val.getBytes());
+                }
+
+            } catch (IOException e) {
+                Log.e("app.main","Couldn't write to SD");
+            }
+            fos.close();
+        } catch (Exception ex) {
+            Log.e("app.main","Couldn't write to SD");
+        }
+
     }
+
 
     //IOIO Funcs
     public synchronized void set_speed(int speed)
